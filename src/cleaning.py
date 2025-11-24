@@ -42,7 +42,7 @@ def load_and_clean_epa(
     path = Path(path)
 
     # EPA file uses ';' as the delimiter
-    epa = pd.read_csv(path, sep=";", low_memory=False)
+    epa = pd.read_csv("../data/raw/all-vehicles-model.csv", sep=";", low_memory=False)
 
     # Columns we care about (you can add more if needed)
     cols_of_interest = [
@@ -113,7 +113,7 @@ def load_and_clean_sports(
         Cleaned sports car dataframe.
     """
     path = Path(path)
-    sports = pd.read_csv(path, low_memory=False)
+    sports = pd.read_csv("../data/raw/Sport-car-price.csv", low_memory=False)
 
     numeric_cols = [
         "Engine Size (L)",
@@ -172,11 +172,11 @@ if __name__ == "__main__":
     python -m src.cleaning
     """
     # Adjust these paths to match your repo structure
-    epa_raw_path = Path("data/raw/all-vehicles-model.csv")
-    sports_raw_path = Path("data/raw/Sport car price.csv")
+    epa_raw_path = Path("../data/raw/all-vehicles-model.csv")
+    sports_raw_path = Path("../data/raw/Sport-car-price.csv")
 
     epa_clean = load_and_clean_epa(epa_raw_path)
     sports_clean = load_and_clean_sports(sports_raw_path)
 
-    save_dataframe(epa_clean, "data/processed/epa_clean.csv")
-    save_dataframe(sports_clean, "data/processed/sports_clean.csv")
+    save_dataframe(epa_clean, "../data/cleaned/epa_clean.csv")
+    save_dataframe(sports_clean, "../data/cleaned/sports_clean.csv")
