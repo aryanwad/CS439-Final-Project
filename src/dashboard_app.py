@@ -538,6 +538,9 @@ class Act2Tab(QWidget):
         super().__init__(parent)
         self.act_name = "Act 2: Electrification"
         self.epa_df = epa_df
+        self.scatter_artists = []
+        self.scatter_data = None
+        self.scatter_annot = None
         self._build_ui()
         self._connect_signals()
         self.update_fuel_share_chart()
@@ -577,12 +580,41 @@ class Act2Tab(QWidget):
         # Narrative box
         self.narrative_box = QTextEdit()
         self.narrative_box.setReadOnly(True)
-        self.narrative_box.setPlainText(
-            "Act 2 Narrative:\n\n"
-            "- Electrification transforms EPA vehicles.\n"
-            "- EV era accelerates after ~2015.\n"
-            "- Sports cars do NOT participate in this shift.\n"
-            "- This chart (2A) shows the rapid transition from gas → hybrid → EV."
+        self.narrative_box.setMarkdown(
+            "## Act 2: The Electrification Revolution\n\n"
+            "### The Market Transformation (2013-2024)\n\n"
+            "**What You're Seeing:**\n\n"
+            "The left visualization (2A) shows a dramatic market shift:\n"
+            "- **2013-2015**: Gasoline dominates ~85-90% of the market. Hybrids represent a small "
+            "but growing alternative. EVs are barely visible.\n"
+            "- **2016-2018**: The inflection point. EV share begins climbing while gas share "
+            "steadily declines. Hybrids stabilize as a bridge technology.\n"
+            "- **2019-2024**: Rapid acceleration. EVs capture 15-20% market share by 2024. "
+            "The composition of mainstream vehicles fundamentally changes.\n\n"
+            "### Breaking the Efficiency Ceiling\n\n"
+            "The right visualization (2B) reveals something remarkable:\n"
+            "- **Gas vehicles (blue dots)**: Stuck at 20-35 MPG across all years. Despite decades "
+            "of engineering, efficiency improvements are incremental.\n"
+            "- **Hybrids (orange dots)**: Achieve 40-60 MPG by combining gas and electric power. "
+            "A meaningful improvement, but still limited.\n"
+            "- **EVs (green dots)**: Appear in later years at 80-140+ MPG equivalent. They don't "
+            "just improve efficiency - they redefine what's possible.\n\n"
+            "**Hover over any dot** to see specific vehicle models and their exact specifications.\n\n"
+            "### The Key Insight: One-Sided Convergence\n\n"
+            "This is where the story gets interesting:\n"
+            "- **EPA vehicles move toward performance**: By adopting electric powertrains, mainstream "
+            "vehicles gain both efficiency AND performance capabilities.\n"
+            "- **Sports cars stay traditional**: Our sports car dataset contains no EVs. While EPA "
+            "vehicles electrify, performance vehicles in this analysis remain combustion-based.\n"
+            "- **The gap narrows from one side only**: Convergence is happening, but it's asymmetric. "
+            "Only one market is evolving.\n\n"
+            "### Why This Matters\n\n"
+            "Electrification doesn't just improve existing vehicles - it breaks the fundamental "
+            "tradeoff between performance and efficiency. In the combustion era, you chose: "
+            "power OR economy. EVs deliver both.\n\n"
+            "This sets up our final question in Act 3: If only one market is moving, can we "
+            "truly call this convergence? Or are we witnessing two markets that will remain "
+            "fundamentally distinct?"
         )
         row2_layout.addWidget(self.narrative_box)
 
@@ -750,6 +782,9 @@ class Act2Tab(QWidget):
         df_sub = self.epa_df.loc[mask].copy()
         df_sub = df_sub.dropna(subset=["Combined Mpg For Fuel Type1"])
 
+        # Store filtered data for tooltip access
+        self.scatter_data = df_sub.copy()
+
         # Create axis
         ax = self.scatter_figure.add_subplot(111)
 
@@ -782,12 +817,15 @@ class Act2Tab(QWidget):
         # Get unique fuel types
         fuel_types_present = df_sub["Fuel Type"].unique()
 
+        # Store scatter artists for hover detection
+        self.scatter_artists = []
+
         # Plot each fuel type separately
         for fuel_type in fuel_types_present:
             fuel_data = df_sub[df_sub["Fuel Type"] == fuel_type]
             color = color_map.get(fuel_type, "#bcbd22")
 
-            ax.scatter(
+            scatter = ax.scatter(
                 fuel_data["Year"],
                 fuel_data["Combined Mpg For Fuel Type1"],
                 c=color,
@@ -796,6 +834,7 @@ class Act2Tab(QWidget):
                 s=25,
                 edgecolors='none'
             )
+            self.scatter_artists.append((scatter, fuel_data))
 
         # Formatting
         ax.set_xlabel("Year", fontsize=10)
@@ -807,8 +846,71 @@ class Act2Tab(QWidget):
         # Set reasonable axis limits
         ax.set_ylim(bottom=0)
 
+        # Create annotation for tooltip (initially invisible)
+        self.scatter_annot = ax.annotate(
+            "",
+            xy=(0, 0),
+            xytext=(10, 10),
+            textcoords="offset points",
+            bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.9),
+            fontsize=8,
+            visible=False
+        )
+
         self.scatter_figure.tight_layout()
         self.canvas_scatter.draw()
+
+        # Connect hover event
+        self.canvas_scatter.mpl_connect('motion_notify_event', self.on_scatter_hover)
+
+    def on_scatter_hover(self, event):
+        """
+        Handle mouse hover events on scatter plot to show tooltips.
+        """
+        if not self.scatter_annot or event.inaxes != self.scatter_figure.gca():
+            if self.scatter_annot:
+                self.scatter_annot.set_visible(False)
+                self.canvas_scatter.draw_idle()
+            return
+
+        # Check if mouse is near any point
+        found = False
+        for scatter, fuel_data in self.scatter_artists:
+            contains, ind = scatter.contains(event)
+            if contains:
+                # Get the index of the closest point
+                idx = ind["ind"][0]
+
+                # Get the data point
+                data_idx = fuel_data.index[idx]
+                row = self.scatter_data.loc[data_idx]
+
+                # Build tooltip text
+                make = row.get("Make", "N/A")
+                model = row.get("Model", "N/A")
+                year = int(row.get("Year", 0))
+                fuel_type = row.get("Fuel Type", "N/A")
+                combined_mpg = row.get("Combined Mpg For Fuel Type1", 0)
+                co2 = row.get("Co2  Tailpipe For Fuel Type1", 0)
+
+                # Format tooltip
+                tooltip_text = f"{make} {model}\n"
+                tooltip_text += f"Year: {year}\n"
+                tooltip_text += f"Fuel: {fuel_type}\n"
+                tooltip_text += f"Combined MPG: {combined_mpg:.1f}\n"
+                tooltip_text += f"CO₂: {co2:.1f} g/mi"
+
+                # Update annotation
+                self.scatter_annot.xy = (row["Year"], row["Combined Mpg For Fuel Type1"])
+                self.scatter_annot.set_text(tooltip_text)
+                self.scatter_annot.set_visible(True)
+                found = True
+                break
+
+        if not found:
+            self.scatter_annot.set_visible(False)
+
+        self.canvas_scatter.draw_idle()
 
     def _connect_signals(self):
         """
