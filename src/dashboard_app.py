@@ -27,7 +27,13 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 # 🔹 IMPORTANT: match your actual function name in plots_epa.py
-from plots_epa import make_epa_trend_figure, compute_epa_yearly_aggregates
+from plots_epa import (
+    make_epa_trend_figure,
+    compute_epa_yearly_aggregates,
+    make_epa_fuel_share_figure,
+    compute_fuel_share_by_year,
+    make_epa_performance_efficiency_scatter,
+)
 
 
 # ---------- Helpers to load EPA data ----------
@@ -92,7 +98,7 @@ class ControlPanel(QWidget):
     all are available for simplicity.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, year_min_default=2011, year_max_default=2024):
         super().__init__(parent)
 
         main_layout = QVBoxLayout(self)
@@ -105,8 +111,8 @@ class ControlPanel(QWidget):
         self.year_max_spin = QSpinBox()
         self.year_min_spin.setRange(2011, 2024)
         self.year_max_spin.setRange(2011, 2024)
-        self.year_min_spin.setValue(2011)
-        self.year_max_spin.setValue(2024)
+        self.year_min_spin.setValue(year_min_default)
+        self.year_max_spin.setValue(year_max_default)
 
         # Connect validation to ensure min <= max
         self.year_min_spin.valueChanged.connect(self._validate_year_range)
@@ -249,16 +255,21 @@ class ActTab(QWidget):
     - right side: two charts (top row) + one main chart (bottom row)
     """
 
-    def __init__(self, act_name: str, parent=None):
+    def __init__(self, act_name: str, parent=None, year_min_default=2011, year_max_default=2024):
         super().__init__(parent)
         self.act_name = act_name
+        self.year_min_default = year_min_default
+        self.year_max_default = year_max_default
         self._build_ui()
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
 
         # Left: universal control panel
-        self.control_panel = ControlPanel()
+        self.control_panel = ControlPanel(
+            year_min_default=self.year_min_default,
+            year_max_default=self.year_max_default
+        )
         root_layout.addWidget(self.control_panel, stretch=0)
 
         # Right: charts + narrative
@@ -512,6 +523,318 @@ class Act1Tab(QWidget):
         cp.chk_diesel.stateChanged.connect(self.update_epa_trendlines_chart)
 
 
+class Act2Tab(QWidget):
+    """
+    Specialized tab for Act 2: Electrification
+    - Left: universal control panel (defaults to 2013-2024)
+    - Right / Row 1:
+        * Top-left: EPA Fuel Share Over Time (2A) stacked area chart
+        * Top-right: placeholder for performance/efficiency scatter (2B)
+    - Right / Row 2:
+        * Bottom: narrative text
+    """
+
+    def __init__(self, epa_df: pd.DataFrame, parent=None):
+        super().__init__(parent)
+        self.act_name = "Act 2: Electrification"
+        self.epa_df = epa_df
+        self._build_ui()
+        self._connect_signals()
+        self.update_fuel_share_chart()
+        self.update_scatter_chart()
+
+    def _build_ui(self):
+        root_layout = QHBoxLayout(self)
+
+        # Left: control panel with Act 2 year defaults (2013-2024)
+        self.control_panel = ControlPanel(year_min_default=2013, year_max_default=2024)
+        root_layout.addWidget(self.control_panel, stretch=0)
+
+        # Right: charts + narrative
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+
+        # Row 1: two side-by-side visualizations
+        row1 = QWidget()
+        row1_layout = QHBoxLayout(row1)
+        row1_layout.setSpacing(10)
+
+        # Top-left: Fuel Share stacked area chart (2A)
+        self.fuel_share_figure = Figure(figsize=(5, 4))
+        self.canvas_fuel_share = FigureCanvas(self.fuel_share_figure)
+        row1_layout.addWidget(self.canvas_fuel_share)
+
+        # Top-right: Performance vs Efficiency scatter (2B)
+        self.scatter_figure = Figure(figsize=(5, 4))
+        self.canvas_scatter = FigureCanvas(self.scatter_figure)
+        row1_layout.addWidget(self.canvas_scatter)
+
+        # Row 2: narrative box
+        row2 = QWidget()
+        row2_layout = QHBoxLayout(row2)
+        row2_layout.setSpacing(10)
+
+        # Narrative box
+        self.narrative_box = QTextEdit()
+        self.narrative_box.setReadOnly(True)
+        self.narrative_box.setPlainText(
+            "Act 2 Narrative:\n\n"
+            "- Electrification transforms EPA vehicles.\n"
+            "- EV era accelerates after ~2015.\n"
+            "- Sports cars do NOT participate in this shift.\n"
+            "- This chart (2A) shows the rapid transition from gas → hybrid → EV."
+        )
+        row2_layout.addWidget(self.narrative_box)
+
+        # Add rows to right layout
+        right_layout.addWidget(row1, stretch=2)
+        right_layout.addWidget(row2, stretch=1)
+
+        root_layout.addWidget(right_panel, stretch=1)
+
+    def update_fuel_share_chart(self):
+        """
+        Rebuild the fuel share stacked area chart using current control panel settings.
+        """
+        cp = self.control_panel
+
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+        use_percent = cp.chk_raw_vs_percent.isChecked()
+
+        # Collect selected fuel types
+        fuel_type_mapping = {
+            'gas': 'Gasoline',
+            'hybrid': 'Diesel/Electric',
+            'ev': 'Electricity',
+            'diesel': 'Diesel'
+        }
+
+        selected_fuel_types = []
+        if cp.chk_gas.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['gas'])
+        if cp.chk_hybrid.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['hybrid'])
+        if cp.chk_ev.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['ev'])
+        if cp.chk_diesel.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['diesel'])
+
+        # Clear the existing figure
+        self.fuel_share_figure.clear()
+
+        # Get fuel counts by year
+        fuel_wide = compute_fuel_share_by_year(
+            self.epa_df, year_min, year_max, selected_fuel_types if selected_fuel_types else None
+        )
+
+        # Create axis
+        ax = self.fuel_share_figure.add_subplot(111)
+
+        # If no data, show message
+        if len(fuel_wide) == 0:
+            ax.text(
+                0.5, 0.5,
+                "No data available for selected filters",
+                ha='center', va='center',
+                fontsize=12, color='gray',
+                transform=ax.transAxes
+            )
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Share")
+            ax.set_title("Fuel Type Market Share Over Time")
+            self.fuel_share_figure.tight_layout()
+            self.canvas_fuel_share.draw()
+            return
+
+        years = fuel_wide["Year"].values
+        fuel_cols = [col for col in fuel_wide.columns if col != "Year"]
+
+        # If no fuel types found, show message
+        if len(fuel_cols) == 0:
+            ax.text(
+                0.5, 0.5,
+                "No fuel types selected",
+                ha='center', va='center',
+                fontsize=12, color='gray',
+                transform=ax.transAxes
+            )
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Share")
+            ax.set_title("Fuel Type Market Share Over Time")
+            self.fuel_share_figure.tight_layout()
+            self.canvas_fuel_share.draw()
+            return
+
+        # Convert to percentage if requested
+        if use_percent:
+            row_sums = fuel_wide[fuel_cols].sum(axis=1)
+            row_sums = row_sums.replace(0, 1)
+            for col in fuel_cols:
+                fuel_wide[col] = (fuel_wide[col] / row_sums) * 100
+
+        # Prepare data for stackplot
+        fuel_data = [fuel_wide[col].values for col in fuel_cols]
+
+        # Define colors
+        color_map = {
+            "Gasoline": "#1f77b4",
+            "Diesel": "#7f7f7f",
+            "Diesel/Electric": "#ff7f0e",
+            "Electricity": "#2ca02c",
+            "CNG": "#d62728",
+            "E85": "#9467bd",
+        }
+        colors = [color_map.get(ft, "#bcbd22") for ft in fuel_cols]
+
+        # Create stacked area chart
+        ax.stackplot(years, *fuel_data, labels=fuel_cols, colors=colors, alpha=0.8)
+
+        # Formatting
+        ax.set_xlabel("Year", fontsize=10)
+        if use_percent:
+            ax.set_ylabel("Market Share (%)", fontsize=10)
+            ax.set_ylim(0, 100)
+        else:
+            ax.set_ylabel("Number of Vehicle Models", fontsize=10)
+
+        ax.set_title("Fuel Type Market Share Over Time (EPA Dataset)", fontsize=11)
+        ax.legend(fontsize=8, loc='upper left', framealpha=0.9)
+        ax.grid(True, alpha=0.3, axis='y')
+
+        self.fuel_share_figure.tight_layout()
+        self.canvas_fuel_share.draw()
+
+    def update_scatter_chart(self):
+        """
+        Rebuild the performance vs efficiency scatter plot using current control panel settings.
+        """
+        cp = self.control_panel
+
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+        show_only_electrified = cp.chk_show_only_electrified.isChecked()
+
+        # Collect selected fuel types
+        fuel_type_mapping = {
+            'gas': 'Gasoline',
+            'hybrid': 'Diesel/Electric',
+            'ev': 'Electricity',
+            'diesel': 'Diesel'
+        }
+
+        selected_fuel_types = []
+        if cp.chk_gas.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['gas'])
+        if cp.chk_hybrid.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['hybrid'])
+        if cp.chk_ev.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['ev'])
+        if cp.chk_diesel.isChecked():
+            selected_fuel_types.append(fuel_type_mapping['diesel'])
+
+        # Clear the existing figure
+        self.scatter_figure.clear()
+
+        # Filter data
+        mask = (self.epa_df["Year"] >= year_min) & (self.epa_df["Year"] <= year_max)
+
+        if selected_fuel_types and "Fuel Type" in self.epa_df.columns:
+            fuel_mask = self.epa_df["Fuel Type"].isin(selected_fuel_types)
+            mask = mask & fuel_mask
+
+        if show_only_electrified and "Fuel Type" in self.epa_df.columns:
+            electrified_mask = self.epa_df["Fuel Type"].isin(["Diesel/Electric", "Electricity"])
+            mask = mask & electrified_mask
+
+        df_sub = self.epa_df.loc[mask].copy()
+        df_sub = df_sub.dropna(subset=["Combined Mpg For Fuel Type1"])
+
+        # Create axis
+        ax = self.scatter_figure.add_subplot(111)
+
+        # If no data, show message
+        if len(df_sub) == 0:
+            ax.text(
+                0.5, 0.5,
+                "No data available for selected filters",
+                ha='center', va='center',
+                fontsize=12, color='gray',
+                transform=ax.transAxes
+            )
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Combined MPG")
+            ax.set_title("Efficiency Evolution Over Time")
+            self.scatter_figure.tight_layout()
+            self.canvas_scatter.draw()
+            return
+
+        # Define colors
+        color_map = {
+            "Gasoline": "#1f77b4",
+            "Diesel": "#7f7f7f",
+            "Diesel/Electric": "#ff7f0e",
+            "Electricity": "#2ca02c",
+            "CNG": "#d62728",
+            "E85": "#9467bd",
+        }
+
+        # Get unique fuel types
+        fuel_types_present = df_sub["Fuel Type"].unique()
+
+        # Plot each fuel type separately
+        for fuel_type in fuel_types_present:
+            fuel_data = df_sub[df_sub["Fuel Type"] == fuel_type]
+            color = color_map.get(fuel_type, "#bcbd22")
+
+            ax.scatter(
+                fuel_data["Year"],
+                fuel_data["Combined Mpg For Fuel Type1"],
+                c=color,
+                label=fuel_type,
+                alpha=0.5,
+                s=25,
+                edgecolors='none'
+            )
+
+        # Formatting
+        ax.set_xlabel("Year", fontsize=10)
+        ax.set_ylabel("Combined MPG", fontsize=10)
+        ax.set_title("Efficiency Evolution Over Time", fontsize=11)
+        ax.legend(fontsize=8, loc='upper left', framealpha=0.9)
+        ax.grid(True, alpha=0.3)
+
+        # Set reasonable axis limits
+        ax.set_ylim(bottom=0)
+
+        self.scatter_figure.tight_layout()
+        self.canvas_scatter.draw()
+
+    def _connect_signals(self):
+        """
+        Connect control panel signals to both chart updates.
+        """
+        cp = self.control_panel
+
+        # Connect to fuel share chart (2A)
+        cp.year_min_spin.valueChanged.connect(self.update_fuel_share_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_fuel_share_chart)
+        cp.chk_gas.stateChanged.connect(self.update_fuel_share_chart)
+        cp.chk_hybrid.stateChanged.connect(self.update_fuel_share_chart)
+        cp.chk_ev.stateChanged.connect(self.update_fuel_share_chart)
+        cp.chk_diesel.stateChanged.connect(self.update_fuel_share_chart)
+        cp.chk_raw_vs_percent.stateChanged.connect(self.update_fuel_share_chart)
+
+        # Connect to scatter chart (2B)
+        cp.year_min_spin.valueChanged.connect(self.update_scatter_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_scatter_chart)
+        cp.chk_gas.stateChanged.connect(self.update_scatter_chart)
+        cp.chk_hybrid.stateChanged.connect(self.update_scatter_chart)
+        cp.chk_ev.stateChanged.connect(self.update_scatter_chart)
+        cp.chk_diesel.stateChanged.connect(self.update_scatter_chart)
+        cp.chk_show_only_electrified.stateChanged.connect(self.update_scatter_chart)
+
+
 # ---------- Main Window ----------
 
 
@@ -530,10 +853,12 @@ class MainWindow(QMainWindow):
         # Act 1: custom tab with real EPA trendlines visualization
         tabs.addTab(Act1Tab(self.epa_df), "Act 1: Diverging Priorities")
 
-        # Act 2 & 3: still generic placeholders for now
-        tabs.addTab(ActTab("Act 2: Electrification"), "Act 2: Electrification")
+        # Act 2: Focus on electrification era (2013-2024) with fuel share chart
+        tabs.addTab(Act2Tab(self.epa_df), "Act 2: Electrification")
+
+        # Act 3: Full range for convergence analysis (still placeholder)
         tabs.addTab(
-            ActTab("Act 3: Convergence vs Coexistence"),
+            ActTab("Act 3: Convergence vs Coexistence", year_min_default=2011, year_max_default=2024),
             "Act 3: Convergence vs Coexistence",
         )
 
