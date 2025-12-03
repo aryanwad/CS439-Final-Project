@@ -306,14 +306,24 @@ def make_epa_fuel_share_figure(
     # Prepare data for stackplot (needs lists of values for each fuel type)
     fuel_data = [fuel_wide[col].values for col in fuel_cols]
 
-    # Define colors for fuel types
+    # Define colors for fuel types - simplified to 2 categories
+    # All gas types → Blue, All electric types → Green
     color_map = {
-        "Gasoline": "#1f77b4",  # Blue
-        "Diesel": "#7f7f7f",  # Gray
-        "Diesel/Electric": "#ff7f0e",  # Orange (Hybrid)
-        "Electricity": "#2ca02c",  # Green (EV)
-        "CNG": "#d62728",  # Red
-        "E85": "#9467bd",  # Purple
+        # Gas types (Blue)
+        "Regular": "#1f77b4",
+        "Premium": "#1f77b4",
+        "Midgrade": "#1f77b4",
+        "Gasoline or E85": "#1f77b4",
+        "Premium or E85": "#1f77b4",
+        "Diesel": "#1f77b4",
+        "Gasoline or natural gas": "#1f77b4",
+        "CNG": "#1f77b4",
+        # Electric types (Green)
+        "Electricity": "#2ca02c",
+        "Regular Gas and Electricity": "#2ca02c",
+        "Premium Gas or Electricity": "#2ca02c",
+        "Premium and Electricity": "#2ca02c",
+        "Regular Gas or Electricity": "#2ca02c",
     }
 
     # Assign colors based on fuel type names
@@ -409,14 +419,24 @@ def make_epa_performance_efficiency_scatter(
         fig.tight_layout()
         return fig
 
-    # Define colors for fuel types
+    # Define colors for fuel types - simplified to 2 categories
+    # All gas types → Blue, All electric types → Green
     color_map = {
-        "Gasoline": "#1f77b4",  # Blue
-        "Diesel": "#7f7f7f",  # Gray
-        "Diesel/Electric": "#ff7f0e",  # Orange (Hybrid)
-        "Electricity": "#2ca02c",  # Green (EV)
-        "CNG": "#d62728",  # Red
-        "E85": "#9467bd",  # Purple
+        # Gas types (Blue)
+        "Regular": "#1f77b4",
+        "Premium": "#1f77b4",
+        "Midgrade": "#1f77b4",
+        "Gasoline or E85": "#1f77b4",
+        "Premium or E85": "#1f77b4",
+        "Diesel": "#1f77b4",
+        "Gasoline or natural gas": "#1f77b4",
+        "CNG": "#1f77b4",
+        # Electric types (Green)
+        "Electricity": "#2ca02c",
+        "Regular Gas and Electricity": "#2ca02c",
+        "Premium Gas or Electricity": "#2ca02c",
+        "Premium and Electricity": "#2ca02c",
+        "Regular Gas or Electricity": "#2ca02c",
     }
 
     # Get unique fuel types in the filtered data

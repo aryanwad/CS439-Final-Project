@@ -159,22 +159,16 @@ class ControlPanel(QWidget):
         epa_layout.addWidget(self.chk_show_epa)
 
         fuel_layout = QGridLayout()
-        self.chk_gas = QCheckBox("Gas")
-        self.chk_hybrid = QCheckBox("Hybrid")
-        self.chk_ev = QCheckBox("EV")
-        self.chk_diesel = QCheckBox("Diesel")
+        self.chk_gas = QCheckBox("Gasoline (Traditional Combustion)")
+        self.chk_electric = QCheckBox("Electric (EVs + Hybrids)")
         self.chk_gas.setChecked(True)
-        self.chk_hybrid.setChecked(True)
-        self.chk_ev.setChecked(True)
-        self.chk_diesel.setChecked(True)
+        self.chk_electric.setChecked(True)
 
         fuel_layout.addWidget(self.chk_gas, 0, 0)
-        fuel_layout.addWidget(self.chk_hybrid, 0, 1)
-        fuel_layout.addWidget(self.chk_ev, 1, 0)
-        fuel_layout.addWidget(self.chk_diesel, 1, 1)
+        fuel_layout.addWidget(self.chk_electric, 0, 1)
         epa_layout.addLayout(fuel_layout)
 
-        self.chk_show_only_electrified = QCheckBox("Show only hybrids/EVs in scatter")
+        self.chk_show_only_electrified = QCheckBox("Show only Electric vehicles in scatter")
         epa_layout.addWidget(self.chk_show_only_electrified)
 
         self.chk_raw_vs_percent = QCheckBox("Use % share instead of raw counts")
@@ -404,24 +398,19 @@ class Act1Tab(QWidget):
         show_co2 = show_epa
         show_disp = show_epa
 
-        # Collect selected fuel types from checkboxes
-        # Map UI labels to actual dataset values
-        fuel_type_mapping = {
-            'gas': 'Gasoline',
-            'hybrid': 'Diesel/Electric',  # Hybrids often labeled this way in EPA data
-            'ev': 'Electricity',
-            'diesel': 'Diesel'
-        }
+        # Define fuel type groupings
+        gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
+                     'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
+        electric_types = ['Electricity', 'Regular Gas and Electricity',
+                         'Premium Gas or Electricity', 'Premium and Electricity',
+                         'Regular Gas or Electricity']
 
+        # Collect selected fuel types based on checkboxes
         selected_fuel_types = []
         if cp.chk_gas.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['gas'])
-        if cp.chk_hybrid.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['hybrid'])
-        if cp.chk_ev.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['ev'])
-        if cp.chk_diesel.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['diesel'])
+            selected_fuel_types.extend(gas_types)
+        if cp.chk_electric.isChecked():
+            selected_fuel_types.extend(electric_types)
 
         # Clear all axes from the existing figure
         self.epa_figure.clear()
@@ -514,13 +503,9 @@ class Act1Tab(QWidget):
         cp.chk_show_epa.stateChanged.connect(self.update_epa_trendlines_chart)
         cp.chk_normalize.stateChanged.connect(self.update_epa_trendlines_chart)
 
-        # Fuel-type checkboxes are currently not used in plots_epa.py,
-        # but you can later add filtering in make_epa_trend_figure and
-        # then also connect these:
+        # Fuel-type checkboxes for filtering
         cp.chk_gas.stateChanged.connect(self.update_epa_trendlines_chart)
-        cp.chk_hybrid.stateChanged.connect(self.update_epa_trendlines_chart)
-        cp.chk_ev.stateChanged.connect(self.update_epa_trendlines_chart)
-        cp.chk_diesel.stateChanged.connect(self.update_epa_trendlines_chart)
+        cp.chk_electric.stateChanged.connect(self.update_epa_trendlines_chart)
 
 
 class Act2Tab(QWidget):
@@ -627,6 +612,7 @@ class Act2Tab(QWidget):
     def update_fuel_share_chart(self):
         """
         Rebuild the fuel share stacked area chart using current control panel settings.
+        Groups all fuel types into just 2 categories: Gas and Electric.
         """
         cp = self.control_panel
 
@@ -634,37 +620,44 @@ class Act2Tab(QWidget):
         year_max = cp.year_max_spin.value()
         use_percent = cp.chk_raw_vs_percent.isChecked()
 
-        # Collect selected fuel types
-        fuel_type_mapping = {
-            'gas': 'Gasoline',
-            'hybrid': 'Diesel/Electric',
-            'ev': 'Electricity',
-            'diesel': 'Diesel'
-        }
+        # Define fuel type groupings
+        gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
+                     'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
+        electric_types = ['Electricity', 'Regular Gas and Electricity',
+                         'Premium Gas or Electricity', 'Premium and Electricity',
+                         'Regular Gas or Electricity']
 
-        selected_fuel_types = []
+        # Filter by year and create grouped fuel type column
+        mask = (self.epa_df["Year"] >= year_min) & (self.epa_df["Year"] <= year_max)
+        df_sub = self.epa_df.loc[mask].copy()
+
+        # Map fuel types to simplified categories
+        def map_fuel_type(ft):
+            if ft in gas_types:
+                return "Gas"
+            elif ft in electric_types:
+                return "Electric"
+            else:
+                return "Other"
+
+        df_sub["Fuel Category"] = df_sub["Fuel Type"].apply(map_fuel_type)
+
+        # Filter by selected categories
+        selected_categories = []
         if cp.chk_gas.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['gas'])
-        if cp.chk_hybrid.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['hybrid'])
-        if cp.chk_ev.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['ev'])
-        if cp.chk_diesel.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['diesel'])
+            selected_categories.append("Gas")
+        if cp.chk_electric.isChecked():
+            selected_categories.append("Electric")
+
+        if selected_categories:
+            df_sub = df_sub[df_sub["Fuel Category"].isin(selected_categories)]
 
         # Clear the existing figure
         self.fuel_share_figure.clear()
-
-        # Get fuel counts by year
-        fuel_wide = compute_fuel_share_by_year(
-            self.epa_df, year_min, year_max, selected_fuel_types if selected_fuel_types else None
-        )
-
-        # Create axis
         ax = self.fuel_share_figure.add_subplot(111)
 
         # If no data, show message
-        if len(fuel_wide) == 0:
+        if len(df_sub) == 0:
             ax.text(
                 0.5, 0.5,
                 "No data available for selected filters",
@@ -679,24 +672,20 @@ class Act2Tab(QWidget):
             self.canvas_fuel_share.draw()
             return
 
+        # Group by Year and Fuel Category, count occurrences
+        fuel_counts = (
+            df_sub.groupby(["Year", "Fuel Category"], as_index=False)
+            .size()
+            .rename(columns={"size": "count"})
+        )
+
+        # Pivot to wide format
+        fuel_wide = fuel_counts.pivot(
+            index="Year", columns="Fuel Category", values="count"
+        ).fillna(0).reset_index()
+
         years = fuel_wide["Year"].values
         fuel_cols = [col for col in fuel_wide.columns if col != "Year"]
-
-        # If no fuel types found, show message
-        if len(fuel_cols) == 0:
-            ax.text(
-                0.5, 0.5,
-                "No fuel types selected",
-                ha='center', va='center',
-                fontsize=12, color='gray',
-                transform=ax.transAxes
-            )
-            ax.set_xlabel("Year")
-            ax.set_ylabel("Share")
-            ax.set_title("Fuel Type Market Share Over Time")
-            self.fuel_share_figure.tight_layout()
-            self.canvas_fuel_share.draw()
-            return
 
         # Convert to percentage if requested
         if use_percent:
@@ -708,15 +697,8 @@ class Act2Tab(QWidget):
         # Prepare data for stackplot
         fuel_data = [fuel_wide[col].values for col in fuel_cols]
 
-        # Define colors
-        color_map = {
-            "Gasoline": "#1f77b4",
-            "Diesel": "#7f7f7f",
-            "Diesel/Electric": "#ff7f0e",
-            "Electricity": "#2ca02c",
-            "CNG": "#d62728",
-            "E85": "#9467bd",
-        }
+        # Define colors: Gas=Blue, Electric=Green
+        color_map = {"Gas": "#1f77b4", "Electric": "#2ca02c"}
         colors = [color_map.get(ft, "#bcbd22") for ft in fuel_cols]
 
         # Create stacked area chart
@@ -740,6 +722,7 @@ class Act2Tab(QWidget):
     def update_scatter_chart(self):
         """
         Rebuild the performance vs efficiency scatter plot using current control panel settings.
+        For this chart specifically, shows 3 categories: Gas, Hybrid, and Electric (pure EV).
         """
         cp = self.control_panel
 
@@ -747,45 +730,50 @@ class Act2Tab(QWidget):
         year_max = cp.year_max_spin.value()
         show_only_electrified = cp.chk_show_only_electrified.isChecked()
 
-        # Collect selected fuel types
-        fuel_type_mapping = {
-            'gas': 'Gasoline',
-            'hybrid': 'Diesel/Electric',
-            'ev': 'Electricity',
-            'diesel': 'Diesel'
-        }
+        # Define fuel type groupings - 3 categories for scatter chart
+        gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
+                     'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
+        hybrid_types = ['Regular Gas and Electricity', 'Premium Gas or Electricity',
+                       'Premium and Electricity', 'Regular Gas or Electricity']
+        electric_types = ['Electricity']
 
-        selected_fuel_types = []
-        if cp.chk_gas.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['gas'])
-        if cp.chk_hybrid.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['hybrid'])
-        if cp.chk_ev.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['ev'])
-        if cp.chk_diesel.isChecked():
-            selected_fuel_types.append(fuel_type_mapping['diesel'])
-
-        # Clear the existing figure
-        self.scatter_figure.clear()
-
-        # Filter data
+        # Filter by year
         mask = (self.epa_df["Year"] >= year_min) & (self.epa_df["Year"] <= year_max)
-
-        if selected_fuel_types and "Fuel Type" in self.epa_df.columns:
-            fuel_mask = self.epa_df["Fuel Type"].isin(selected_fuel_types)
-            mask = mask & fuel_mask
-
-        if show_only_electrified and "Fuel Type" in self.epa_df.columns:
-            electrified_mask = self.epa_df["Fuel Type"].isin(["Diesel/Electric", "Electricity"])
-            mask = mask & electrified_mask
-
         df_sub = self.epa_df.loc[mask].copy()
         df_sub = df_sub.dropna(subset=["Combined Mpg For Fuel Type1"])
+
+        # Map fuel types to 3 categories for scatter chart
+        def map_fuel_type(ft):
+            if ft in gas_types:
+                return "Gas"
+            elif ft in hybrid_types:
+                return "Hybrid"
+            elif ft in electric_types:
+                return "Electric"
+            else:
+                return "Other"
+
+        df_sub["Fuel Category"] = df_sub["Fuel Type"].apply(map_fuel_type)
+
+        # Filter by selected categories (Electric checkbox includes both Hybrid and Electric)
+        selected_categories = []
+        if cp.chk_gas.isChecked():
+            selected_categories.append("Gas")
+        if cp.chk_electric.isChecked():
+            selected_categories.extend(["Hybrid", "Electric"])
+
+        if selected_categories:
+            df_sub = df_sub[df_sub["Fuel Category"].isin(selected_categories)]
+
+        # Filter for electrified only if requested
+        if show_only_electrified:
+            df_sub = df_sub[df_sub["Fuel Category"].isin(["Hybrid", "Electric"])]
 
         # Store filtered data for tooltip access
         self.scatter_data = df_sub.copy()
 
-        # Create axis
+        # Clear the existing figure
+        self.scatter_figure.clear()
         ax = self.scatter_figure.add_subplot(111)
 
         # If no data, show message
@@ -804,37 +792,30 @@ class Act2Tab(QWidget):
             self.canvas_scatter.draw()
             return
 
-        # Define colors
-        color_map = {
-            "Gasoline": "#1f77b4",
-            "Diesel": "#7f7f7f",
-            "Diesel/Electric": "#ff7f0e",
-            "Electricity": "#2ca02c",
-            "CNG": "#d62728",
-            "E85": "#9467bd",
-        }
+        # Define colors: Gas=Blue, Hybrid=Orange, Electric=Green
+        color_map = {"Gas": "#1f77b4", "Hybrid": "#ff7f0e", "Electric": "#2ca02c"}
 
-        # Get unique fuel types
-        fuel_types_present = df_sub["Fuel Type"].unique()
+        # Get unique fuel categories
+        fuel_categories_present = df_sub["Fuel Category"].unique()
 
         # Store scatter artists for hover detection
         self.scatter_artists = []
 
-        # Plot each fuel type separately
-        for fuel_type in fuel_types_present:
-            fuel_data = df_sub[df_sub["Fuel Type"] == fuel_type]
-            color = color_map.get(fuel_type, "#bcbd22")
+        # Plot each fuel category separately
+        for fuel_category in fuel_categories_present:
+            cat_data = df_sub[df_sub["Fuel Category"] == fuel_category]
+            color = color_map.get(fuel_category, "#bcbd22")
 
             scatter = ax.scatter(
-                fuel_data["Year"],
-                fuel_data["Combined Mpg For Fuel Type1"],
+                cat_data["Year"],
+                cat_data["Combined Mpg For Fuel Type1"],
                 c=color,
-                label=fuel_type,
+                label=fuel_category,
                 alpha=0.5,
                 s=25,
                 edgecolors='none'
             )
-            self.scatter_artists.append((scatter, fuel_data))
+            self.scatter_artists.append((scatter, cat_data))
 
         # Formatting
         ax.set_xlabel("Year", fontsize=10)
@@ -847,10 +828,11 @@ class Act2Tab(QWidget):
         ax.set_ylim(bottom=0)
 
         # Create annotation for tooltip (initially invisible)
+        # Position will be dynamically adjusted based on point location
         self.scatter_annot = ax.annotate(
             "",
             xy=(0, 0),
-            xytext=(10, 10),
+            xytext=(10, 10),  # Default position, will be adjusted dynamically
             textcoords="offset points",
             bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.9),
             fontsize=8,
@@ -866,6 +848,7 @@ class Act2Tab(QWidget):
     def on_scatter_hover(self, event):
         """
         Handle mouse hover events on scatter plot to show tooltips.
+        Dynamically positions tooltip to avoid going off screen.
         """
         if not self.scatter_annot or event.inaxes != self.scatter_figure.gca():
             if self.scatter_annot:
@@ -889,19 +872,26 @@ class Act2Tab(QWidget):
                 make = row.get("Make", "N/A")
                 model = row.get("Model", "N/A")
                 year = int(row.get("Year", 0))
-                fuel_type = row.get("Fuel Type", "N/A")
+                fuel_category = row.get("Fuel Category", "N/A")  # Use simplified category
                 combined_mpg = row.get("Combined Mpg For Fuel Type1", 0)
                 co2 = row.get("Co2  Tailpipe For Fuel Type1", 0)
 
                 # Format tooltip
                 tooltip_text = f"{make} {model}\n"
                 tooltip_text += f"Year: {year}\n"
-                tooltip_text += f"Fuel: {fuel_type}\n"
+                tooltip_text += f"Type: {fuel_category}\n"
                 tooltip_text += f"Combined MPG: {combined_mpg:.1f}\n"
                 tooltip_text += f"CO₂: {co2:.1f} g/mi"
 
+                # Smart positioning: if year < 2019, show tooltip on RIGHT, else on LEFT
+                if year < 2019:
+                    offset = (10, 10)  # Show on right
+                else:
+                    offset = (-120, 10)  # Show on left
+
                 # Update annotation
                 self.scatter_annot.xy = (row["Year"], row["Combined Mpg For Fuel Type1"])
+                self.scatter_annot.xytext = offset
                 self.scatter_annot.set_text(tooltip_text)
                 self.scatter_annot.set_visible(True)
                 found = True
@@ -922,18 +912,14 @@ class Act2Tab(QWidget):
         cp.year_min_spin.valueChanged.connect(self.update_fuel_share_chart)
         cp.year_max_spin.valueChanged.connect(self.update_fuel_share_chart)
         cp.chk_gas.stateChanged.connect(self.update_fuel_share_chart)
-        cp.chk_hybrid.stateChanged.connect(self.update_fuel_share_chart)
-        cp.chk_ev.stateChanged.connect(self.update_fuel_share_chart)
-        cp.chk_diesel.stateChanged.connect(self.update_fuel_share_chart)
+        cp.chk_electric.stateChanged.connect(self.update_fuel_share_chart)
         cp.chk_raw_vs_percent.stateChanged.connect(self.update_fuel_share_chart)
 
         # Connect to scatter chart (2B)
         cp.year_min_spin.valueChanged.connect(self.update_scatter_chart)
         cp.year_max_spin.valueChanged.connect(self.update_scatter_chart)
         cp.chk_gas.stateChanged.connect(self.update_scatter_chart)
-        cp.chk_hybrid.stateChanged.connect(self.update_scatter_chart)
-        cp.chk_ev.stateChanged.connect(self.update_scatter_chart)
-        cp.chk_diesel.stateChanged.connect(self.update_scatter_chart)
+        cp.chk_electric.stateChanged.connect(self.update_scatter_chart)
         cp.chk_show_only_electrified.stateChanged.connect(self.update_scatter_chart)
 
 
