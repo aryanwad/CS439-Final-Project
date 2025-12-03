@@ -19,6 +19,7 @@ def compute_sports_yearly_aggregates(
     - 'Horsepower'
     - 'Engine Size (L)'
     - 'Price (in USD)'
+    - '0-60 MPH Time (seconds)'
     - 'Car Make' (optional, for filtering)
 
     Parameters
@@ -49,6 +50,7 @@ def compute_sports_yearly_aggregates(
                 "Horsepower",
                 "Engine Size (L)",
                 "Price (in USD)",
+                "0-60 MPH Time (seconds)",
             ]
         ]
         .mean()

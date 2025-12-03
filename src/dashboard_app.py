@@ -356,6 +356,7 @@ class Act1Tab(QWidget):
         self._connect_signals()
         self.update_sports_trendlines_chart()
         self.update_epa_trendlines_chart()
+        self.update_comparison_chart()
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
@@ -394,9 +395,10 @@ class Act1Tab(QWidget):
         row2_layout.setSpacing(5)  # Reduce spacing
         row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
-        # Bottom-left: placeholder for comparison chart (1C)
-        self.chart_bottom_main = ChartPlaceholder(f"{self.act_name} - Comparison Chart (1C)")
-        row2_layout.addWidget(self.chart_bottom_main)
+        # Bottom-left: comparison chart (1C) - two stacked panels
+        self.comparison_figure = Figure(figsize=(8, 5))
+        self.canvas_comparison = FigureCanvas(self.comparison_figure)
+        row2_layout.addWidget(self.canvas_comparison)
 
         # Bottom-right: narrative box
         self.narrative_box = QTextEdit()
@@ -634,6 +636,179 @@ class Act1Tab(QWidget):
         self.epa_figure.tight_layout(pad=2.5)  # Add padding to prevent cutoff
         self.canvas_epa.draw()
 
+    # ---------- Comparison chart (1C) wiring ----------
+
+    def update_comparison_chart(self):
+        """
+        Rebuild the comparison chart (1C) showing diverging priorities.
+        Slope chart: Start year vs End year showing how metrics change.
+        """
+        cp = self.control_panel
+
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+
+        # Clear the figure
+        self.comparison_figure.clear()
+        ax = self.comparison_figure.add_subplot(111)
+
+        # Get sports data
+        sports_brand = cp.cmb_sports_brand.currentText()
+        sports_brands = None if sports_brand == "All Brands" else [sports_brand]
+        sports_yearly = compute_sports_yearly_aggregates(
+            self.sports_df, year_min, year_max, brands=sports_brands
+        )
+
+        # Get EPA data
+        gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
+                     'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
+        electric_types = ['Electricity', 'Regular Gas and Electricity',
+                         'Premium Gas or Electricity', 'Premium and Electricity',
+                         'Regular Gas or Electricity']
+        selected_fuel_types = []
+        if cp.chk_gas.isChecked():
+            selected_fuel_types.extend(gas_types)
+        if cp.chk_electric.isChecked():
+            selected_fuel_types.extend(electric_types)
+
+        epa_yearly = compute_epa_yearly_aggregates(
+            self.epa_df, year_min, year_max,
+            fuel_types=selected_fuel_types if selected_fuel_types else None
+        )
+
+        # Check if we have data
+        if len(sports_yearly) == 0 or len(epa_yearly) == 0:
+            ax.text(0.5, 0.5, "No data available for selected filters",
+                   ha='center', va='center', fontsize=12, color='gray',
+                   transform=ax.transAxes)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            self.comparison_figure.tight_layout(pad=1.5)
+            self.canvas_comparison.draw()
+            return
+
+        # Get first and last year data (normalize to start = 100)
+        metrics_data = []
+        y_position = 0
+
+        # Sports metrics - all GREEN to show performance/luxury priority
+        sports_color = "#2ca02c"  # Green
+        sports_metrics = [
+            ("Engine Size (L)", "Engine Size", False),
+            ("Horsepower", "Horsepower", False),
+            ("0-60 MPH Time (seconds)", "Acceleration (0-60)", True)  # Inverted: lower is better
+        ]
+
+        for col, label, invert in sports_metrics:
+            if col in sports_yearly.columns:
+                values = sports_yearly[col].dropna()
+                if len(values) >= 2:
+                    start_val = values.iloc[0]
+                    end_val = values.iloc[-1]
+                    if start_val != 0:
+                        start_norm = 100
+                        if invert:
+                            # For inverted metrics (lower is better), flip the ratio
+                            end_norm = (start_val / end_val) * 100
+                            display_label = f"{label} (inverted)"
+                        else:
+                            display_label = label
+                            end_norm = (end_val / start_val) * 100
+                        metrics_data.append({
+                            'label': display_label,
+                            'start': start_norm,
+                            'end': end_norm,
+                            'y': y_position,
+                            'color': sports_color,
+                            'market': 'Sports'
+                        })
+                        y_position += 1
+
+        y_position += 0.5  # Add gap between markets
+
+        # EPA metrics - all RED to show efficiency/environmental priority
+        epa_color = "#d62728"  # Red
+        epa_metrics = [
+            ("Engine displacement", "Engine Size", False),
+            ("Combined Mpg For Fuel Type1", "Efficiency (MPG)", False),
+            ("Co2  Tailpipe For Fuel Type1", "Emissions (CO₂)", True)  # Inverted: lower is better
+        ]
+
+        for col, label, invert in epa_metrics:
+            if col in epa_yearly.columns:
+                values = epa_yearly[col].dropna()
+                if len(values) >= 2:
+                    start_val = values.iloc[0]
+                    end_val = values.iloc[-1]
+                    if start_val != 0:
+                        start_norm = 100
+                        if invert:
+                            # For inverted metrics (lower is better), flip the ratio
+                            end_norm = (start_val / end_val) * 100
+                            display_label = f"{label} (inverted)"
+                        else:
+                            display_label = label
+                            end_norm = (end_val / start_val) * 100
+                        metrics_data.append({
+                            'label': display_label,
+                            'start': start_norm,
+                            'end': end_norm,
+                            'y': y_position,
+                            'color': epa_color,
+                            'market': 'EPA'
+                        })
+                        y_position += 1
+
+        # Draw slope lines
+        for metric in metrics_data:
+            # Draw line from start to end
+            ax.plot([0, 1], [metric['start'], metric['end']],
+                   color=metric['color'], linewidth=2.5, alpha=0.8,
+                   marker='o', markersize=8)
+
+            # Label on left (start)
+            ax.text(-0.05, metric['start'], f"{metric['start']:.0f}",
+                   ha='right', va='center', fontsize=9, color=metric['color'])
+
+            # Label on right (end)
+            ax.text(1.05, metric['end'], f"{metric['end']:.0f}",
+                   ha='left', va='center', fontsize=9, color=metric['color'])
+
+            # Metric name on far right
+            ax.text(1.15, metric['end'], metric['label'],
+                   ha='left', va='center', fontsize=9,
+                   color=metric['color'], weight='bold')
+
+        # Styling
+        ax.set_xlim(-0.2, 1.4)
+        ax.set_ylim(min([m['start'] for m in metrics_data] + [m['end'] for m in metrics_data]) - 10,
+                   max([m['start'] for m in metrics_data] + [m['end'] for m in metrics_data]) + 10)
+
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels([f'{year_min}', f'{year_max}'], fontsize=11, weight='bold')
+        ax.set_yticks([])  # Hide y-axis ticks
+
+        ax.spines['left'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(True)
+
+        ax.set_title("Diverging Priorities: Performance vs. Efficiency\n(Normalized: Start Year = 100, Higher = Better)",
+                    fontsize=12, pad=20)
+
+        # Add color-coded legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#2ca02c', label='Sports Cars (Performance)'),
+            Patch(facecolor='#d62728', label='EPA Vehicles (Efficiency)')
+        ]
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=9, framealpha=0.9)
+
+        ax.grid(True, axis='x', alpha=0.3, linestyle='--')
+
+        self.comparison_figure.tight_layout(pad=1.5)
+        self.canvas_comparison.draw()
+
     def _connect_signals(self):
         """
         Connect relevant control panel signals to both charts.
@@ -656,6 +831,14 @@ class Act1Tab(QWidget):
         # Fuel-type checkboxes for filtering
         cp.chk_gas.stateChanged.connect(self.update_epa_trendlines_chart)
         cp.chk_electric.stateChanged.connect(self.update_epa_trendlines_chart)
+
+        # Comparison chart (1C) signals - updates when any control changes
+        cp.year_min_spin.valueChanged.connect(self.update_comparison_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_comparison_chart)
+        cp.chk_normalize.stateChanged.connect(self.update_comparison_chart)
+        cp.cmb_sports_brand.currentIndexChanged.connect(self.update_comparison_chart)
+        cp.chk_gas.stateChanged.connect(self.update_comparison_chart)
+        cp.chk_electric.stateChanged.connect(self.update_comparison_chart)
 
 
 class Act2Tab(QWidget):
