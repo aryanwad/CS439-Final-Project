@@ -35,6 +35,11 @@ from plots_epa import (
     make_epa_performance_efficiency_scatter,
 )
 
+from plots_sports import (
+    compute_sports_yearly_aggregates,
+    make_sports_trend_figure,
+)
+
 
 # ---------- Helpers to load EPA data ----------
 
@@ -63,6 +68,23 @@ def load_epa_data():
     except Exception as e:
         print("Error loading EPA data:", e)
         raise
+
+
+def load_sports_data():
+    """
+    Load the sports car dataset.
+    """
+    try:
+        df = pd.read_csv("../data/cleaned/sports_clean.csv")
+        return df
+    except Exception:
+        print("Could not load sports_clean.csv, trying raw data...")
+        try:
+            df = pd.read_csv("../data/raw/Sport-car-price.csv")
+            return df
+        except Exception as e:
+            print("Error loading sports data:", e)
+            raise
 
 
 # ---------- UI Components ----------
@@ -129,7 +151,7 @@ class ControlPanel(QWidget):
         sports_group = QGroupBox("Sports Car Options")
         sports_layout = QVBoxLayout()
 
-        self.chk_show_sports = QCheckBox("Show sports lines (HP, Engine, Price)")
+        self.chk_show_sports = QCheckBox("Show Sports Lines")
         self.chk_show_sports.setChecked(True)
         sports_layout.addWidget(self.chk_show_sports)
 
@@ -154,13 +176,13 @@ class ControlPanel(QWidget):
         epa_group = QGroupBox("EPA / Fuel Type Options")
         epa_layout = QVBoxLayout()
 
-        self.chk_show_epa = QCheckBox("Show EPA lines (MPG, CO₂, Displacement)")
+        self.chk_show_epa = QCheckBox("Show EPA Lines")
         self.chk_show_epa.setChecked(True)
         epa_layout.addWidget(self.chk_show_epa)
 
         fuel_layout = QGridLayout()
-        self.chk_gas = QCheckBox("Gasoline (Traditional Combustion)")
-        self.chk_electric = QCheckBox("Electric (EVs + Hybrids)")
+        self.chk_gas = QCheckBox("Gasoline")
+        self.chk_electric = QCheckBox("Electric")
         self.chk_gas.setChecked(True)
         self.chk_electric.setChecked(True)
 
@@ -168,10 +190,10 @@ class ControlPanel(QWidget):
         fuel_layout.addWidget(self.chk_electric, 0, 1)
         epa_layout.addLayout(fuel_layout)
 
-        self.chk_show_only_electrified = QCheckBox("Show only Electric vehicles in scatter")
+        self.chk_show_only_electrified = QCheckBox("Show only Electric")
         epa_layout.addWidget(self.chk_show_only_electrified)
 
-        self.chk_raw_vs_percent = QCheckBox("Use % share instead of raw counts")
+        self.chk_raw_vs_percent = QCheckBox("Use % share")
         epa_layout.addWidget(self.chk_raw_vs_percent)
 
         epa_group.setLayout(epa_layout)
@@ -258,22 +280,27 @@ class ActTab(QWidget):
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
+        root_layout.setSpacing(5)  # Reduce spacing between sidebar and charts
+        root_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Left: universal control panel
+        # Left: universal control panel (narrow)
         self.control_panel = ControlPanel(
             year_min_default=self.year_min_default,
             year_max_default=self.year_max_default
         )
+        self.control_panel.setMaximumWidth(250)  # Limit width
         root_layout.addWidget(self.control_panel, stretch=0)
 
         # Right: charts + narrative
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(5)  # Reduce vertical spacing
 
         # Row 1: two side-by-side visualizations
         row1 = QWidget()
         row1_layout = QHBoxLayout(row1)
-        row1_layout.setSpacing(10)
+        row1_layout.setSpacing(5)  # Reduce spacing between charts
+        row1_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
         # Placeholders for the top two charts
         self.chart_top_left = ChartPlaceholder(f"{self.act_name} - Top Left Chart")
@@ -285,7 +312,8 @@ class ActTab(QWidget):
         # Row 2: one main comparison visualization
         row2 = QWidget()
         row2_layout = QHBoxLayout(row2)
-        row2_layout.setSpacing(10)
+        row2_layout.setSpacing(5)  # Reduce spacing
+        row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
         self.chart_bottom_main = ChartPlaceholder(f"{self.act_name} - Main Comparison Chart")
         row2_layout.addWidget(self.chart_bottom_main)
@@ -319,43 +347,52 @@ class Act1Tab(QWidget):
         * Bottom-right: narrative text
     """
 
-    def __init__(self, epa_df: pd.DataFrame, parent=None):
+    def __init__(self, sports_df: pd.DataFrame, epa_df: pd.DataFrame, parent=None):
         super().__init__(parent)
         self.act_name = "Act 1: Diverging Priorities"
+        self.sports_df = sports_df
         self.epa_df = epa_df
         self._build_ui()
         self._connect_signals()
+        self.update_sports_trendlines_chart()
         self.update_epa_trendlines_chart()
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
+        root_layout.setSpacing(5)  # Reduce spacing between sidebar and charts
+        root_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Left: universal control panel
+        # Left: universal control panel (narrow)
         self.control_panel = ControlPanel()
+        self.control_panel.setMaximumWidth(250)  # Limit width
         root_layout.addWidget(self.control_panel, stretch=0)
 
         # Right: charts + narrative
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(5)  # Reduce vertical spacing
 
         # Row 1: two side-by-side visualizations
         row1 = QWidget()
         row1_layout = QHBoxLayout(row1)
-        row1_layout.setSpacing(10)
+        row1_layout.setSpacing(5)  # Reduce spacing between charts
+        row1_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
-        # Top-left: placeholder (for sports trendlines 1A)
-        self.chart_top_left = ChartPlaceholder(f"{self.act_name} - Sports Trendlines (1A)")
-        row1_layout.addWidget(self.chart_top_left)
+        # Top-left: Sports trendlines chart (1A)
+        self.sports_figure = Figure(figsize=(6, 5.5))
+        self.canvas_sports = FigureCanvas(self.sports_figure)
+        row1_layout.addWidget(self.canvas_sports)
 
-        # Top-right: real EPA trendlines chart (1B)
-        self.epa_figure = Figure(figsize=(5, 4))
+        # Top-right: EPA trendlines chart (1B)
+        self.epa_figure = Figure(figsize=(6, 5.5))
         self.canvas_epa = FigureCanvas(self.epa_figure)
         row1_layout.addWidget(self.canvas_epa)
 
         # Row 2: one main comparison visualization + narrative
         row2 = QWidget()
         row2_layout = QHBoxLayout(row2)
-        row2_layout.setSpacing(10)
+        row2_layout.setSpacing(5)  # Reduce spacing
+        row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
         # Bottom-left: placeholder for comparison chart (1C)
         self.chart_bottom_main = ChartPlaceholder(f"{self.act_name} - Comparison Chart (1C)")
@@ -378,6 +415,111 @@ class Act1Tab(QWidget):
         right_layout.addWidget(row2, stretch=3)
 
         root_layout.addWidget(right_panel, stretch=1)
+
+    # ---------- Sports trendlines wiring ----------
+
+    def update_sports_trendlines_chart(self):
+        """
+        Rebuild the sports trendlines figure using the current control panel settings.
+        """
+        cp = self.control_panel
+
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+        normalize = cp.chk_normalize.isChecked()
+        show_sports = cp.chk_show_sports.isChecked()
+
+        # For now, we'll show all three metrics (HP, Engine, Price)
+        # You can add individual toggles later if needed
+        show_hp = show_sports
+        show_engine = show_sports
+        show_price = show_sports
+
+        # Get selected brand from dropdown
+        selected_brand = cp.cmb_sports_brand.currentText()
+        if selected_brand == "All Brands":
+            brands = None
+        else:
+            brands = [selected_brand]
+
+        # Clear all axes from the existing figure
+        self.sports_figure.clear()
+
+        # Get yearly aggregates with brand filtering
+        yearly = compute_sports_yearly_aggregates(
+            self.sports_df,
+            year_min,
+            year_max,
+            brands=brands
+        )
+        plot_df = yearly.copy()
+
+        # Apply normalization if requested
+        if normalize:
+            for col in ["Horsepower", "Engine Size (L)", "Price (in USD)"]:
+                if col in plot_df.columns:
+                    non_null = plot_df[col].dropna()
+                    if len(non_null) > 0:
+                        first_valid = non_null.iloc[0]
+                        if first_valid != 0:
+                            plot_df[col] = (plot_df[col] / first_valid) * 100.0
+
+        # Create a new axis on the existing figure
+        ax = self.sports_figure.add_subplot(111)
+
+        # Check if at least one metric is enabled
+        if not (show_hp or show_engine or show_price):
+            ax.text(
+                0.5, 0.5,
+                "No metrics selected\n\nPlease enable sports metrics\nto view the visualization",
+                ha='center', va='center',
+                fontsize=12, color='gray',
+                transform=ax.transAxes
+            )
+            ax.set_xlabel("Year")
+            ax.set_ylabel("Value")
+            ax.set_title("Sports Car Trendlines: Performance & Price Over Time")
+            ax.grid(True, alpha=0.3)
+        else:
+            # Plot lines based on flags
+            if show_hp and "Horsepower" in plot_df.columns:
+                ax.plot(
+                    plot_df["Year"],
+                    plot_df["Horsepower"],
+                    label="Avg Horsepower",
+                    linewidth=2,
+                    color="#d62728",  # Red
+                )
+
+            if show_engine and "Engine Size (L)" in plot_df.columns:
+                ax.plot(
+                    plot_df["Year"],
+                    plot_df["Engine Size (L)"],
+                    label="Avg Engine Size (L)",
+                    linewidth=2,
+                    color="#ff7f0e",  # Orange
+                )
+
+            if show_price and "Price (in USD)" in plot_df.columns:
+                ax.plot(
+                    plot_df["Year"],
+                    plot_df["Price (in USD)"],
+                    label="Avg Price (USD)",
+                    linewidth=2,
+                    color="#2ca02c",  # Green
+                )
+
+            ax.set_xlabel("Year", fontsize=11)
+            if normalize:
+                ax.set_ylabel("Index (base year = 100)", fontsize=11)
+            else:
+                ax.set_ylabel("Value (units vary by line)", fontsize=11)
+            ax.set_title("Sports Car Trendlines: Performance & Price Over Time", fontsize=12)
+            ax.legend(fontsize=9, loc='best', framealpha=0.9)
+            ax.grid(True, alpha=0.3)
+
+        self.sports_figure.tight_layout(pad=2.5)  # Add padding to prevent cutoff
+        self.canvas_sports.draw()
 
     # ---------- EPA trendlines wiring (uses your make_epa_trend_figure) ----------
 
@@ -480,24 +622,32 @@ class Act1Tab(QWidget):
                     linewidth=2,
                 )
 
-            ax.set_xlabel("Year", fontsize=10)
+            ax.set_xlabel("Year", fontsize=11)
             if normalize:
-                ax.set_ylabel("Index (base year = 100)", fontsize=10)
+                ax.set_ylabel("Index (base year = 100)", fontsize=11)
             else:
-                ax.set_ylabel("Value (units vary by line)", fontsize=10)
-            ax.set_title("EPA Trendlines: Efficiency & Engine Size Over Time", fontsize=11)
-            ax.legend(fontsize=8, loc='best', framealpha=0.9)
+                ax.set_ylabel("Value (units vary by line)", fontsize=11)
+            ax.set_title("EPA Trendlines: Efficiency & Engine Size Over Time", fontsize=12)
+            ax.legend(fontsize=9, loc='best', framealpha=0.9)
             ax.grid(True, alpha=0.3)
 
-        self.epa_figure.tight_layout()
+        self.epa_figure.tight_layout(pad=2.5)  # Add padding to prevent cutoff
         self.canvas_epa.draw()
 
     def _connect_signals(self):
         """
-        Connect relevant control panel signals to the EPA chart update.
+        Connect relevant control panel signals to both charts.
         """
         cp = self.control_panel
 
+        # Sports chart signals
+        cp.year_min_spin.valueChanged.connect(self.update_sports_trendlines_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_sports_trendlines_chart)
+        cp.chk_show_sports.stateChanged.connect(self.update_sports_trendlines_chart)
+        cp.chk_normalize.stateChanged.connect(self.update_sports_trendlines_chart)
+        cp.cmb_sports_brand.currentIndexChanged.connect(self.update_sports_trendlines_chart)
+
+        # EPA chart signals
         cp.year_min_spin.valueChanged.connect(self.update_epa_trendlines_chart)
         cp.year_max_spin.valueChanged.connect(self.update_epa_trendlines_chart)
         cp.chk_show_epa.stateChanged.connect(self.update_epa_trendlines_chart)
@@ -533,34 +683,40 @@ class Act2Tab(QWidget):
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
+        root_layout.setSpacing(5)  # Reduce spacing between sidebar and charts
+        root_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Left: control panel with Act 2 year defaults (2013-2024)
+        # Left: control panel with Act 2 year defaults (2013-2024, narrow)
         self.control_panel = ControlPanel(year_min_default=2013, year_max_default=2024)
+        self.control_panel.setMaximumWidth(250)  # Limit width
         root_layout.addWidget(self.control_panel, stretch=0)
 
         # Right: charts + narrative
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(5)  # Reduce vertical spacing
 
         # Row 1: two side-by-side visualizations
         row1 = QWidget()
         row1_layout = QHBoxLayout(row1)
-        row1_layout.setSpacing(10)
+        row1_layout.setSpacing(5)  # Reduce spacing between charts
+        row1_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
         # Top-left: Fuel Share stacked area chart (2A)
-        self.fuel_share_figure = Figure(figsize=(5, 4))
+        self.fuel_share_figure = Figure(figsize=(6, 5.5))
         self.canvas_fuel_share = FigureCanvas(self.fuel_share_figure)
         row1_layout.addWidget(self.canvas_fuel_share)
 
         # Top-right: Performance vs Efficiency scatter (2B)
-        self.scatter_figure = Figure(figsize=(5, 4))
+        self.scatter_figure = Figure(figsize=(6, 5.5))
         self.canvas_scatter = FigureCanvas(self.scatter_figure)
         row1_layout.addWidget(self.canvas_scatter)
 
         # Row 2: narrative box
         row2 = QWidget()
         row2_layout = QHBoxLayout(row2)
-        row2_layout.setSpacing(10)
+        row2_layout.setSpacing(5)  # Reduce spacing
+        row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
 
         # Narrative box
         self.narrative_box = QTextEdit()
@@ -705,15 +861,15 @@ class Act2Tab(QWidget):
         ax.stackplot(years, *fuel_data, labels=fuel_cols, colors=colors, alpha=0.8)
 
         # Formatting
-        ax.set_xlabel("Year", fontsize=10)
+        ax.set_xlabel("Year", fontsize=11)
         if use_percent:
-            ax.set_ylabel("Market Share (%)", fontsize=10)
+            ax.set_ylabel("Market Share (%)", fontsize=11)
             ax.set_ylim(0, 100)
         else:
-            ax.set_ylabel("Number of Vehicle Models", fontsize=10)
+            ax.set_ylabel("Number of Vehicle Models", fontsize=11)
 
-        ax.set_title("Fuel Type Market Share Over Time (EPA Dataset)", fontsize=11)
-        ax.legend(fontsize=8, loc='upper left', framealpha=0.9)
+        ax.set_title("Fuel Type Market Share Over Time (EPA Dataset)", fontsize=12)
+        ax.legend(fontsize=9, loc='upper left', framealpha=0.9)
         ax.grid(True, alpha=0.3, axis='y')
 
         self.fuel_share_figure.tight_layout()
@@ -818,10 +974,10 @@ class Act2Tab(QWidget):
             self.scatter_artists.append((scatter, cat_data))
 
         # Formatting
-        ax.set_xlabel("Year", fontsize=10)
-        ax.set_ylabel("Combined MPG", fontsize=10)
-        ax.set_title("Efficiency Evolution Over Time", fontsize=11)
-        ax.legend(fontsize=8, loc='upper left', framealpha=0.9)
+        ax.set_xlabel("Year", fontsize=11)
+        ax.set_ylabel("Combined MPG", fontsize=11)
+        ax.set_title("Efficiency Evolution Over Time", fontsize=12)
+        ax.legend(fontsize=9, loc='upper left', framealpha=0.9)
         ax.grid(True, alpha=0.3)
 
         # Set reasonable axis limits
@@ -934,12 +1090,13 @@ class MainWindow(QMainWindow):
         self.resize(1400, 800)
 
         # Load data
+        self.sports_df = load_sports_data()
         self.epa_df = load_epa_data()
 
         tabs = QTabWidget()
 
-        # Act 1: custom tab with real EPA trendlines visualization
-        tabs.addTab(Act1Tab(self.epa_df), "Act 1: Diverging Priorities")
+        # Act 1: custom tab with real sports and EPA trendlines visualizations
+        tabs.addTab(Act1Tab(self.sports_df, self.epa_df), "Act 1: Diverging Priorities")
 
         # Act 2: Focus on electrification era (2013-2024) with fuel share chart
         tabs.addTab(Act2Tab(self.epa_df), "Act 2: Electrification")
