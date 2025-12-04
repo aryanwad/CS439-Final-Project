@@ -46,45 +46,40 @@ from plots_sports import (
 
 def load_epa_data():
     """
-    Try to load a preprocessed EPA dataset.
-    If it fails, fall back to using cleaning.load_and_clean_epa
-    on the raw file.
+    Load the preprocessed EPA dataset WITH horsepower data.
+    Sports cars have already been removed during cleaning.
 
-    Adjust paths to match your repo structure.
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned EPA dataframe with HP and 0-60 time columns.
+        Sports cars already filtered out.
     """
-    # First try processed file (recommended)
     try:
-        df = pd.read_csv("../data/cleaned/epa_clean.csv")
-        return df
-    except Exception:
-        print("Could not load data/processed/epa_clean.csv, falling back to raw + cleaning...")
-
-    # Fallback: use your cleaning module on raw data
-    try:
-        from cleaning import load_and_clean_epa
-
-        df = load_and_clean_epa("../data/raw/all-vehicles-model.csv")
+        df = pd.read_csv("../data/cleaned/epa_with_hp_clean.csv")
+        print(f"Loaded EPA dataset: {len(df)} mainstream vehicles (sports cars already removed)")
         return df
     except Exception as e:
-        print("Error loading EPA data:", e)
+        print(f"Error loading EPA data: {e}")
         raise
 
 
 def load_sports_data():
     """
-    Load the sports car dataset.
+    Load the sports car dataset WITH MPG data.
+
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned sports car dataframe with MPG column.
     """
     try:
-        df = pd.read_csv("../data/cleaned/sports_clean.csv")
+        df = pd.read_csv("../data/cleaned/sports_with_mpg_clean.csv")
+        print(f"Loaded sports dataset: {len(df)} sports cars with MPG data")
         return df
-    except Exception:
-        print("Could not load sports_clean.csv, trying raw data...")
-        try:
-            df = pd.read_csv("../data/raw/Sport-car-price.csv")
-            return df
-        except Exception as e:
-            print("Error loading sports data:", e)
-            raise
+    except Exception as e:
+        print(f"Error loading sports data: {e}")
+        raise
 
 
 # ---------- UI Components ----------
