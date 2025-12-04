@@ -1162,15 +1162,16 @@ class Act2Tab(QWidget):
         ax.set_ylim(bottom=0)
 
         # Create annotation for tooltip (initially invisible)
-        # Position will be dynamically adjusted based on point location
         self.scatter_annot = ax.annotate(
             "",
             xy=(0, 0),
-            xytext=(10, 10),  # Default position, will be adjusted dynamically
+            xytext=(10, 10),
             textcoords="offset points",
             bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.9),
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0", color="black"),
             fontsize=8,
-            visible=False
+            visible=False,
+            ha="left"  # Default horizontal alignment
         )
 
         self.scatter_figure.tight_layout()
@@ -1181,59 +1182,70 @@ class Act2Tab(QWidget):
 
     def on_scatter_hover(self, event):
         """
-        Handle mouse hover events on scatter plot to show tooltips.
-        Dynamically positions tooltip to avoid going off screen.
+        Handle mouse hover events on scatter plot.
+        Shows tooltip on the left for years > 2020 to prevent going off-screen.
         """
+        # Return early if annotation not ready or mouse not in axes
         if not self.scatter_annot or event.inaxes != self.scatter_figure.gca():
-            if self.scatter_annot:
+            if self.scatter_annot and self.scatter_annot.get_visible():
                 self.scatter_annot.set_visible(False)
                 self.canvas_scatter.draw_idle()
             return
 
-        # Check if mouse is near any point
-        found = False
+        # Check if hovering over any data point
+        point_found = False
         for scatter, fuel_data in self.scatter_artists:
             contains, ind = scatter.contains(event)
             if contains:
-                # Get the index of the closest point
+                # Get the data for the hovered point
                 idx = ind["ind"][0]
-
-                # Get the data point
                 data_idx = fuel_data.index[idx]
                 row = self.scatter_data.loc[data_idx]
 
-                # Build tooltip text
+                # Extract data
                 make = row.get("Make", "N/A")
                 model = row.get("Model", "N/A")
                 year = int(row.get("Year", 0))
-                fuel_category = row.get("Fuel Category", "N/A")  # Use simplified category
-                combined_mpg = row.get("Combined Mpg For Fuel Type1", 0)
+                fuel_category = row.get("Fuel Category", "N/A")
+                mpg = row.get("Combined Mpg For Fuel Type1", 0)
                 co2 = row.get("Co2  Tailpipe For Fuel Type1", 0)
 
-                # Format tooltip
-                tooltip_text = f"{make} {model}\n"
-                tooltip_text += f"Year: {year}\n"
-                tooltip_text += f"Type: {fuel_category}\n"
-                tooltip_text += f"Combined MPG: {combined_mpg:.1f}\n"
-                tooltip_text += f"CO₂: {co2:.1f} g/mi"
+                # Build tooltip text
+                text = (
+                    f"{make} {model}\n"
+                    f"Year: {year}\n"
+                    f"Type: {fuel_category}\n"
+                    f"MPG: {mpg:.1f}\n"
+                    f"CO₂: {co2:.1f} g/mi"
+                )
 
-                # Smart positioning: if year < 2019, show tooltip on RIGHT, else on LEFT
-                if year < 2019:
-                    offset = (10, 10)  # Show on right
+                # Determine tooltip position based on year
+                # For years >= 2020, show tooltip on LEFT to avoid going off screen
+                # For years < 2020, show tooltip on RIGHT
+                if year >= 2020:
+                    x_offset = -30  # Left side
+                    h_align = "right"
                 else:
-                    offset = (-120, 10)  # Show on left
+                    x_offset = 15  # Right side
+                    h_align = "left"
 
-                # Update annotation
-                self.scatter_annot.xy = (row["Year"], row["Combined Mpg For Fuel Type1"])
-                self.scatter_annot.xytext = offset
-                self.scatter_annot.set_text(tooltip_text)
+                # Update annotation properties
+                self.scatter_annot.set_text(text)
+                self.scatter_annot.xy = (year, mpg)
+                self.scatter_annot.set_position((x_offset, 10))
+                self.scatter_annot.xyann = (x_offset, 10)
+                self.scatter_annot.set_ha(h_align)
                 self.scatter_annot.set_visible(True)
-                found = True
+
+                point_found = True
                 break
 
-        if not found:
-            self.scatter_annot.set_visible(False)
+        # Hide tooltip if not hovering over any point
+        if not point_found:
+            if self.scatter_annot.get_visible():
+                self.scatter_annot.set_visible(False)
 
+        # Redraw canvas
         self.canvas_scatter.draw_idle()
 
     def _connect_signals(self):
