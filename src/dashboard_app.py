@@ -40,6 +40,8 @@ from plots_sports import (
     make_sports_trend_figure,
 )
 
+from plots_act3 import make_indices_chart
+
 
 # ---------- Helpers to load EPA data ----------
 
@@ -864,8 +866,8 @@ class Act2Tab(QWidget):
         root_layout.setSpacing(5)  # Reduce spacing between sidebar and charts
         root_layout.setContentsMargins(5, 5, 5, 5)  # Reduce margins
 
-        # Left: control panel with Act 2 year defaults (2013-2024, narrow)
-        self.control_panel = ControlPanel(year_min_default=2013, year_max_default=2024)
+        # Left: control panel with Act 2 year defaults (2011-2024, narrow)
+        self.control_panel = ControlPanel(year_min_default=2011, year_max_default=2024)
         self.control_panel.setMaximumWidth(250)  # Limit width
         root_layout.addWidget(self.control_panel, stretch=0)
 
@@ -1269,6 +1271,140 @@ class Act2Tab(QWidget):
         cp.chk_show_only_electrified.stateChanged.connect(self.update_scatter_chart)
 
 
+# ---------- Act 3 Tab ----------
+
+
+class Act3Tab(QWidget):
+    """
+    Act 3: Convergence vs Coexistence
+
+    Chart 3A: Side-by-side Performance and Efficiency Indices
+    - Left: Performance Index over time (Gas, Sports, EV)
+    - Right: Efficiency Index over time (Gas, Sports, EV)
+    """
+
+    def __init__(self, sports_df: pd.DataFrame, epa_df: pd.DataFrame, parent=None):
+        super().__init__(parent)
+        self.sports_df = sports_df
+        self.epa_df = epa_df
+        self._build_ui()
+        self._connect_signals()
+        self.update_indices_chart()
+
+    def _build_ui(self):
+        root_layout = QHBoxLayout(self)
+        root_layout.setSpacing(5)
+        root_layout.setContentsMargins(5, 5, 5, 5)
+
+        # Left: control panel (same as Act 1 and Act 2)
+        self.control_panel = ControlPanel(year_min_default=2011, year_max_default=2024)
+        self.control_panel.setMaximumWidth(250)
+        root_layout.addWidget(self.control_panel, stretch=0)
+
+        # Right: Chart 3A
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(5)
+
+        # Chart 3A: Performance and Efficiency Indices
+        self.indices_figure = Figure(figsize=(14, 5.5))
+        self.canvas_indices = FigureCanvas(self.indices_figure)
+        right_layout.addWidget(self.canvas_indices, stretch=2)
+
+        # Narrative box
+        self.narrative_box = QTextEdit()
+        self.narrative_box.setReadOnly(True)
+        self.narrative_box.setMarkdown(
+            "## Act 3: Convergence or Coexistence?\n\n"
+            "### Two Markets, Two Trajectories\n\n"
+            "**What You're Seeing:**\n\n"
+            "The visualization above shows normalized performance (left) and efficiency (right) "
+            "indices for three vehicle categories:\n"
+            "- **Gas Vehicles (blue)**: Traditional mainstream vehicles\n"
+            "- **Sports Cars (red)**: High-performance specialty vehicles\n"
+            "- **EV Vehicles (green)**: Electric mainstream vehicles\n\n"
+            "### Expected Trends:\n\n"
+            "**Performance Chart (Left):**\n"
+            "- EVs should show **increasing power** as electric powertrains mature\n"
+            "- Sports cars maintain high performance throughout\n"
+            "- Gas vehicles show modest improvements\n\n"
+            "**Efficiency Chart (Right):**\n"
+            "- EVs dominate efficiency with MPG-equivalent ratings\n"
+            "- Gas vehicles show slow, incremental improvements\n"
+            "- Sports cars: Will they show efficiency improvements or remain performance-focused?\n\n"
+            "### The Convergence Question:\n\n"
+            "Are the two markets converging toward similar characteristics, or do they remain "
+            "fundamentally distinct? The answer lies in whether:\n"
+            "1. EVs gain performance (moving toward sports car territory)\n"
+            "2. Sports cars improve efficiency (moving toward mainstream eco-friendliness)\n\n"
+            "If **both** trends occur, we see convergence. If only **one** occurs, the markets "
+            "remain separate but one adapts while the other doesn't."
+        )
+        right_layout.addWidget(self.narrative_box, stretch=1)
+
+        root_layout.addWidget(right_panel, stretch=1)
+
+    def update_indices_chart(self):
+        """
+        Rebuild Chart 3A using current control panel settings.
+        """
+        cp = self.control_panel
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+        show_gas = cp.chk_gas.isChecked()
+        show_sports = cp.chk_show_sports.isChecked()
+        show_ev = cp.chk_electric.isChecked()
+
+        # Clear and rebuild
+        self.indices_figure.clear()
+        fig = make_indices_chart(
+            self.sports_df,
+            self.epa_df,
+            year_min=year_min,
+            year_max=year_max,
+            show_gas=show_gas,
+            show_sports=show_sports,
+            show_ev=show_ev,
+        )
+
+        # Copy axes from returned figure to our canvas figure
+        for i, ax in enumerate(fig.axes):
+            new_ax = self.indices_figure.add_subplot(1, 2, i + 1)
+            # Copy all plot elements
+            for line in ax.get_lines():
+                new_ax.plot(
+                    line.get_xdata(),
+                    line.get_ydata(),
+                    label=line.get_label(),
+                    color=line.get_color(),
+                    linewidth=line.get_linewidth(),
+                    marker=line.get_marker(),
+                    markersize=line.get_markersize(),
+                )
+            new_ax.set_xlabel(ax.get_xlabel(), fontsize=ax.xaxis.label.get_fontsize())
+            new_ax.set_ylabel(ax.get_ylabel(), fontsize=ax.yaxis.label.get_fontsize())
+            new_ax.set_title(ax.get_title(), fontsize=ax.title.get_fontsize(), fontweight=ax.title.get_fontweight())
+            new_ax.set_xlim(ax.get_xlim())
+            new_ax.set_ylim(ax.get_ylim())
+            new_ax.grid(True, alpha=0.3)
+            if ax.get_legend():
+                new_ax.legend(fontsize=9, loc='best', framealpha=0.9)
+
+        self.indices_figure.tight_layout()
+        self.canvas_indices.draw()
+
+    def _connect_signals(self):
+        """
+        Connect control panel signals to chart update.
+        """
+        cp = self.control_panel
+        cp.year_min_spin.valueChanged.connect(self.update_indices_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_indices_chart)
+        cp.chk_gas.stateChanged.connect(self.update_indices_chart)
+        cp.chk_show_sports.stateChanged.connect(self.update_indices_chart)
+        cp.chk_electric.stateChanged.connect(self.update_indices_chart)
+
+
 # ---------- Main Window ----------
 
 
@@ -1291,11 +1427,8 @@ class MainWindow(QMainWindow):
         # Act 2: Focus on electrification era (2013-2024) with fuel share chart
         tabs.addTab(Act2Tab(self.epa_df), "Act 2: Electrification")
 
-        # Act 3: Full range for convergence analysis (still placeholder)
-        tabs.addTab(
-            ActTab("Act 3: Convergence vs Coexistence", year_min_default=2011, year_max_default=2024),
-            "Act 3: Convergence vs Coexistence",
-        )
+        # Act 3: Full range for convergence analysis
+        tabs.addTab(Act3Tab(self.sports_df, self.epa_df), "Act 3: Convergence vs Coexistence")
 
         self.setCentralWidget(tabs)
 
