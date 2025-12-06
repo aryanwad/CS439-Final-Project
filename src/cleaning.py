@@ -251,6 +251,7 @@ def load_and_clean_sports_with_mpg(
     - Reads the new Sport car price with mpg adjusted.csv file.
     - Converts performance, price, and MPG columns to numeric.
     - Filters to a given year range.
+    - Removes duplicates (prioritizing rows with price data).
     - Returns a clean dataframe ready for aggregation.
 
     Parameters
@@ -301,6 +302,24 @@ def load_and_clean_sports_with_mpg(
         sports_clean = sports_clean.loc[year_mask].copy()
     else:
         raise ValueError("Sports dataset is missing 'Year' column.")
+
+    # Remove duplicates, prioritizing rows with price data
+    # Sort by price (NaN last), then drop duplicates keeping first (with price)
+    sports_clean = sports_clean.sort_values(
+        by="Price (in USD)",
+        ascending=False,
+        na_position='last'
+    )
+
+    before_dedup = len(sports_clean)
+    sports_clean = sports_clean.drop_duplicates(
+        subset=["Car Make", "Car Model", "Year"],
+        keep='first'
+    )
+    after_dedup = len(sports_clean)
+
+    if before_dedup > after_dedup:
+        print(f"Removed {before_dedup - after_dedup} duplicate cars (kept versions with price data)")
 
     return sports_clean
 
@@ -410,7 +429,7 @@ if __name__ == "__main__":
 
     # Paths to new datasets
     epa_with_hp_path = Path("../data/raw/all-vehicles-model-with-hp-0-60.csv")
-    sports_with_mpg_path = Path("../data/raw/Sport car price with mpg adjusted.csv")
+    sports_with_mpg_path = Path("../data/raw/Sport car price with mpg adjusted ENRICHED.csv")
 
     # Clean EPA dataset with HP (and remove sports cars)
     print("\n1. Cleaning EPA dataset with HP data...")

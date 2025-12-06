@@ -3,6 +3,9 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 
 def compute_performance_index(df: pd.DataFrame, hp_col: str) -> pd.DataFrame:
@@ -279,6 +282,194 @@ def make_indices_chart(
     ax2.legend(fontsize=9, loc='best', framealpha=0.9)
     ax2.grid(True, alpha=0.3)
     ax2.axhline(y=100, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+
+    fig.tight_layout()
+    return fig
+
+
+def make_cluster_plot(
+    sports_df: pd.DataFrame,
+    epa_df: pd.DataFrame,
+    year_min: int = 2011,
+    year_max: int = 2024,
+    n_clusters: int = 3,
+    show_sports: bool = True,
+    show_epa: bool = True,
+):
+    """
+    Build Chart 3B: Cluster Plot (PCA-reduced, K-means clustering)
+
+    Combines sports and EPA datasets, extracts features (HP, MPG, displacement),
+    runs PCA to reduce to 2D, then k-means clustering to identify market segments.
+
+    Parameters
+    ----------
+    sports_df : pd.DataFrame
+        Sports car dataset
+    epa_df : pd.DataFrame
+        EPA dataset
+    year_min, year_max : int
+        Year range to include
+    n_clusters : int
+        Number of clusters for k-means (default 3)
+    show_sports : bool
+        Include sports cars in clustering
+    show_epa : bool
+        Include EPA vehicles in clustering
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure ready to embed in dashboard
+    """
+    # Filter by year range
+    sports_filtered = sports_df[(sports_df["Year"] >= year_min) & (sports_df["Year"] <= year_max)].copy()
+    epa_filtered = epa_df[(epa_df["Year"] >= year_min) & (epa_df["Year"] <= year_max)].copy()
+
+    # Prepare sports data
+    sports_data = sports_filtered[["Horsepower", "MPG", "Engine Size (L)"]].copy()
+    sports_data.columns = ["HP", "MPG", "Displacement"]
+    sports_data["Market"] = "Sports"
+    sports_data.dropna(inplace=True)
+
+    # Prepare EPA data
+    epa_data = epa_filtered[["Horsepower (est)", "Combined Mpg For Fuel Type1", "Engine displacement"]].copy()
+    epa_data.columns = ["HP", "MPG", "Displacement"]
+    epa_data["Market"] = "EPA"
+    epa_data.dropna(inplace=True)
+
+    # Combine datasets based on selections
+    datasets = []
+    if show_sports:
+        datasets.append(sports_data)
+    if show_epa:
+        datasets.append(epa_data)
+
+    if not datasets:
+        # Empty plot if nothing selected
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.text(
+            0.5, 0.5,
+            "No market selected\n\nPlease enable Sports or EPA",
+            ha='center', va='center',
+            fontsize=12, color='gray',
+            transform=ax.transAxes
+        )
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_title("Chart 3B: Market Clustering (PCA + K-Means)")
+        fig.tight_layout()
+        return fig
+
+    combined = pd.concat(datasets, ignore_index=True)
+
+    # Check minimum sample size
+    if len(combined) < n_clusters * 2:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.text(
+            0.5, 0.5,
+            f"Not enough data\n\nNeed at least {n_clusters * 2} samples\nGot {len(combined)}",
+            ha='center', va='center',
+            fontsize=12, color='gray',
+            transform=ax.transAxes
+        )
+        ax.set_xlabel("PC1")
+        ax.set_ylabel("PC2")
+        ax.set_title("Chart 3B: Market Clustering (PCA + K-Means)")
+        fig.tight_layout()
+        return fig
+
+    # Extract features for clustering
+    features = combined[["HP", "MPG", "Displacement"]].values
+
+    # Standardize features (important for PCA and k-means)
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
+
+    # Run PCA to reduce to 2D
+    pca = PCA(n_components=2)
+    features_pca = pca.fit_transform(features_scaled)
+
+    # Run k-means clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(features_scaled)
+
+    # Add PCA coordinates and cluster labels to dataframe
+    combined["PC1"] = features_pca[:, 0]
+    combined["PC2"] = features_pca[:, 1]
+    combined["Cluster"] = clusters
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Define colors for clusters
+    cluster_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+
+    # Plot each cluster-market combination
+    for cluster_id in range(n_clusters):
+        cluster_data = combined[combined["Cluster"] == cluster_id]
+
+        # Plot sports cars in this cluster
+        sports_cluster = cluster_data[cluster_data["Market"] == "Sports"]
+        if len(sports_cluster) > 0:
+            ax.scatter(
+                sports_cluster["PC1"],
+                sports_cluster["PC2"],
+                c=cluster_colors[cluster_id],
+                marker='s',  # Square for sports
+                s=80,
+                alpha=0.7,
+                edgecolors='black',
+                linewidth=0.5,
+                label=f"Cluster {cluster_id + 1} - Sports" if show_sports and show_epa else None
+            )
+
+        # Plot EPA vehicles in this cluster
+        epa_cluster = cluster_data[cluster_data["Market"] == "EPA"]
+        if len(epa_cluster) > 0:
+            ax.scatter(
+                epa_cluster["PC1"],
+                epa_cluster["PC2"],
+                c=cluster_colors[cluster_id],
+                marker='o',  # Circle for EPA
+                s=50,
+                alpha=0.6,
+                edgecolors='black',
+                linewidth=0.5,
+                label=f"Cluster {cluster_id + 1} - EPA" if show_sports and show_epa else None
+            )
+
+    # Add cluster centers
+    centers_pca = pca.transform(scaler.transform(kmeans.cluster_centers_))
+    ax.scatter(
+        centers_pca[:, 0],
+        centers_pca[:, 1],
+        c='black',
+        marker='X',
+        s=200,
+        edgecolors='white',
+        linewidth=2,
+        label='Cluster Centers',
+        zorder=10
+    )
+
+    ax.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)", fontsize=11)
+    ax.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)", fontsize=11)
+    ax.set_title(f"Chart 3B: Market Clustering (K={n_clusters})", fontsize=12, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+
+    # Custom legend
+    if show_sports and show_epa:
+        # Create custom legend to show market types
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='Sports Cars', markeredgecolor='black'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=8, label='EPA Vehicles', markeredgecolor='black'),
+            Line2D([0], [0], marker='X', color='w', markerfacecolor='black', markersize=12, label='Cluster Centers', markeredgecolor='white', markeredgewidth=2),
+        ]
+        ax.legend(handles=legend_elements, fontsize=9, loc='best', framealpha=0.9)
+    else:
+        ax.legend(fontsize=9, loc='best', framealpha=0.9)
 
     fig.tight_layout()
     return fig

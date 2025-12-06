@@ -40,7 +40,7 @@ from plots_sports import (
     make_sports_trend_figure,
 )
 
-from plots_act3 import make_indices_chart
+from plots_act3 import make_indices_chart, make_cluster_plot
 
 
 # ---------- Helpers to load EPA data ----------
@@ -1290,6 +1290,7 @@ class Act3Tab(QWidget):
         self._build_ui()
         self._connect_signals()
         self.update_indices_chart()
+        self.update_cluster_chart()
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
@@ -1301,46 +1302,53 @@ class Act3Tab(QWidget):
         self.control_panel.setMaximumWidth(250)
         root_layout.addWidget(self.control_panel, stretch=0)
 
-        # Right: Chart 3A
+        # Right: Charts and narrative
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(5)
 
-        # Chart 3A: Performance and Efficiency Indices
+        # Row 1: Chart 3A - Performance and Efficiency Indices
         self.indices_figure = Figure(figsize=(14, 5.5))
         self.canvas_indices = FigureCanvas(self.indices_figure)
         right_layout.addWidget(self.canvas_indices, stretch=2)
+
+        # Row 2: Chart 3B (cluster plot) + Narrative box
+        row2 = QWidget()
+        row2_layout = QHBoxLayout(row2)
+        row2_layout.setSpacing(5)
+        row2_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Chart 3B: Cluster plot
+        self.cluster_figure = Figure(figsize=(8, 6))
+        self.canvas_cluster = FigureCanvas(self.cluster_figure)
+        row2_layout.addWidget(self.canvas_cluster, stretch=1)
 
         # Narrative box
         self.narrative_box = QTextEdit()
         self.narrative_box.setReadOnly(True)
         self.narrative_box.setMarkdown(
             "## Act 3: Convergence or Coexistence?\n\n"
-            "### Two Markets, Two Trajectories\n\n"
-            "**What You're Seeing:**\n\n"
-            "The visualization above shows normalized performance (left) and efficiency (right) "
-            "indices for three vehicle categories:\n"
-            "- **Gas Vehicles (blue)**: Traditional mainstream vehicles\n"
-            "- **Sports Cars (red)**: High-performance specialty vehicles\n"
-            "- **EV Vehicles (green)**: Electric mainstream vehicles\n\n"
-            "### Expected Trends:\n\n"
-            "**Performance Chart (Left):**\n"
-            "- EVs should show **increasing power** as electric powertrains mature\n"
-            "- Sports cars maintain high performance throughout\n"
-            "- Gas vehicles show modest improvements\n\n"
-            "**Efficiency Chart (Right):**\n"
-            "- EVs dominate efficiency with MPG-equivalent ratings\n"
-            "- Gas vehicles show slow, incremental improvements\n"
-            "- Sports cars: Will they show efficiency improvements or remain performance-focused?\n\n"
-            "### The Convergence Question:\n\n"
-            "Are the two markets converging toward similar characteristics, or do they remain "
-            "fundamentally distinct? The answer lies in whether:\n"
-            "1. EVs gain performance (moving toward sports car territory)\n"
-            "2. Sports cars improve efficiency (moving toward mainstream eco-friendliness)\n\n"
-            "If **both** trends occur, we see convergence. If only **one** occurs, the markets "
-            "remain separate but one adapts while the other doesn't."
+            "### Chart 3A: Temporal Trends\n\n"
+            "The top visualization shows how performance and efficiency evolve over time:\n"
+            "- **Performance (left)**: EVs gaining power dramatically (120%+ growth)\n"
+            "- **Efficiency (right)**: Gas vehicles slowly improving, sports cars volatile\n\n"
+            "### Chart 3B: Market Clustering\n\n"
+            "The cluster plot uses PCA + k-means to identify natural market segments:\n"
+            "- **Circles** = EPA mainstream vehicles\n"
+            "- **Squares** = Sports cars\n"
+            "- **X marks** = Cluster centers\n\n"
+            "**What to look for:**\n"
+            "- **Separate clusters** = Markets remain distinct (coexistence)\n"
+            "- **Mixed clusters** = Markets overlap (convergence)\n"
+            "- **Bridge clusters** = Some vehicles share characteristics of both markets\n\n"
+            "### The Verdict:\n\n"
+            "If you see sports cars and EPA vehicles forming separate clusters, the markets "
+            "remain fundamentally different despite EV performance gains. If clusters mix, "
+            "convergence is real."
         )
-        right_layout.addWidget(self.narrative_box, stretch=1)
+        row2_layout.addWidget(self.narrative_box, stretch=1)
+
+        right_layout.addWidget(row2, stretch=1)
 
         root_layout.addWidget(right_panel, stretch=1)
 
@@ -1393,16 +1401,96 @@ class Act3Tab(QWidget):
         self.indices_figure.tight_layout()
         self.canvas_indices.draw()
 
-    def _connect_signals(self):
+    def update_cluster_chart(self):
         """
-        Connect control panel signals to chart update.
+        Rebuild Chart 3B (cluster plot) using current control panel settings.
         """
         cp = self.control_panel
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+        show_sports = cp.chk_show_sports.isChecked()
+        show_epa = cp.chk_gas.isChecked() or cp.chk_electric.isChecked()
+
+        # Get number of clusters from control panel
+        n_clusters = int(cp.cmb_k.currentText())
+
+        # Clear and rebuild directly on our figure
+        self.cluster_figure.clear()
+        ax = self.cluster_figure.add_subplot(111)
+
+        # Call the cluster plot function but extract the data ourselves
+        from plots_act3 import make_cluster_plot
+
+        # Get the source figure
+        fig_src = make_cluster_plot(
+            self.sports_df,
+            self.epa_df,
+            year_min=year_min,
+            year_max=year_max,
+            n_clusters=n_clusters,
+            show_sports=show_sports,
+            show_epa=show_epa,
+        )
+
+        # Get source axis
+        ax_src = fig_src.gca()
+
+        # Manually recreate scatter plots from source data
+        for collection in ax_src.collections:
+            offsets = collection.get_offsets()
+            colors = collection.get_facecolors()
+            sizes = collection.get_sizes()
+            marker = collection.get_paths()[0] if len(collection.get_paths()) > 0 else 'o'
+            edgecolors = collection.get_edgecolors()
+            linewidths = collection.get_linewidths()
+
+            ax.scatter(
+                offsets[:, 0],
+                offsets[:, 1],
+                c=colors,
+                s=sizes,
+                marker=marker,
+                edgecolors=edgecolors,
+                linewidths=linewidths,
+                alpha=collection.get_alpha() or 1.0
+            )
+
+        # Copy axis properties
+        ax.set_xlim(ax_src.get_xlim())
+        ax.set_ylim(ax_src.get_ylim())
+        ax.set_xlabel(ax_src.get_xlabel())
+        ax.set_ylabel(ax_src.get_ylabel())
+        ax.set_title(ax_src.get_title())
+        ax.grid(True, alpha=0.3)
+
+        # Copy legend
+        if ax_src.get_legend():
+            handles, labels = ax_src.get_legend_handles_labels()
+            ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.9)
+
+        self.cluster_figure.tight_layout()
+        self.canvas_cluster.draw()
+
+    def _connect_signals(self):
+        """
+        Connect control panel signals to chart updates.
+        """
+        cp = self.control_panel
+
+        # Connect to indices chart (3A)
         cp.year_min_spin.valueChanged.connect(self.update_indices_chart)
         cp.year_max_spin.valueChanged.connect(self.update_indices_chart)
         cp.chk_gas.stateChanged.connect(self.update_indices_chart)
         cp.chk_show_sports.stateChanged.connect(self.update_indices_chart)
         cp.chk_electric.stateChanged.connect(self.update_indices_chart)
+
+        # Connect to cluster chart (3B)
+        cp.year_min_spin.valueChanged.connect(self.update_cluster_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_cluster_chart)
+        cp.chk_gas.stateChanged.connect(self.update_cluster_chart)
+        cp.chk_show_sports.stateChanged.connect(self.update_cluster_chart)
+        cp.chk_electric.stateChanged.connect(self.update_cluster_chart)
+        cp.cmb_k.currentTextChanged.connect(self.update_cluster_chart)
 
 
 # ---------- Main Window ----------
