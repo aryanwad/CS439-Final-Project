@@ -40,7 +40,7 @@ from plots_sports import (
     make_sports_trend_figure,
 )
 
-from plots_act3 import make_indices_chart, make_cluster_plot
+from plots_act3 import make_indices_chart, make_cluster_plot, make_convergence_score_chart
 
 
 # ---------- Helpers to load EPA data ----------
@@ -68,16 +68,24 @@ def load_epa_data():
 
 def load_sports_data():
     """
-    Load the sports car dataset WITH MPG data.
+    Load the sports car dataset WITH MPG data and complete price data.
 
     Returns
     -------
     pd.DataFrame
-        Cleaned sports car dataframe with MPG column.
+        Cleaned sports car dataframe with MPG and Price columns.
     """
     try:
         df = pd.read_csv("../data/cleaned/sports_with_mpg_clean.csv")
         print(f"Loaded sports dataset: {len(df)} sports cars with MPG data")
+
+        # Verify price data completeness
+        missing_prices = df['Price (in USD)'].isna().sum()
+        if missing_prices > 0:
+            print(f"⚠️  WARNING: {missing_prices} cars are missing price data!")
+        else:
+            print(f"✓ All {len(df)} sports cars have complete price data")
+
         return df
     except Exception as e:
         print(f"Error loading sports data: {e}")
@@ -1291,6 +1299,7 @@ class Act3Tab(QWidget):
         self._connect_signals()
         self.update_indices_chart()
         self.update_cluster_chart()
+        self.update_convergence_chart()
 
     def _build_ui(self):
         root_layout = QHBoxLayout(self)
@@ -1308,11 +1317,11 @@ class Act3Tab(QWidget):
         right_layout.setSpacing(5)
 
         # Row 1: Chart 3A - Performance and Efficiency Indices
-        self.indices_figure = Figure(figsize=(14, 5.5))
+        self.indices_figure = Figure(figsize=(14, 4))
         self.canvas_indices = FigureCanvas(self.indices_figure)
         right_layout.addWidget(self.canvas_indices, stretch=2)
 
-        # Row 2: Chart 3B (cluster plot) + Narrative box
+        # Row 2: Chart 3B (cluster plot) + Chart 3C (convergence score)
         row2 = QWidget()
         row2_layout = QHBoxLayout(row2)
         row2_layout.setSpacing(5)
@@ -1323,32 +1332,12 @@ class Act3Tab(QWidget):
         self.canvas_cluster = FigureCanvas(self.cluster_figure)
         row2_layout.addWidget(self.canvas_cluster, stretch=1)
 
-        # Narrative box
-        self.narrative_box = QTextEdit()
-        self.narrative_box.setReadOnly(True)
-        self.narrative_box.setMarkdown(
-            "## Act 3: Convergence or Coexistence?\n\n"
-            "### Chart 3A: Temporal Trends\n\n"
-            "The top visualization shows how performance and efficiency evolve over time:\n"
-            "- **Performance (left)**: EVs gaining power dramatically (120%+ growth)\n"
-            "- **Efficiency (right)**: Gas vehicles slowly improving, sports cars volatile\n\n"
-            "### Chart 3B: Market Clustering\n\n"
-            "The cluster plot uses PCA + k-means to identify natural market segments:\n"
-            "- **Circles** = EPA mainstream vehicles\n"
-            "- **Squares** = Sports cars\n"
-            "- **X marks** = Cluster centers\n\n"
-            "**What to look for:**\n"
-            "- **Separate clusters** = Markets remain distinct (coexistence)\n"
-            "- **Mixed clusters** = Markets overlap (convergence)\n"
-            "- **Bridge clusters** = Some vehicles share characteristics of both markets\n\n"
-            "### The Verdict:\n\n"
-            "If you see sports cars and EPA vehicles forming separate clusters, the markets "
-            "remain fundamentally different despite EV performance gains. If clusters mix, "
-            "convergence is real."
-        )
-        row2_layout.addWidget(self.narrative_box, stretch=1)
+        # Chart 3C: Convergence Score
+        self.convergence_figure = Figure(figsize=(8, 6))
+        self.canvas_convergence = FigureCanvas(self.convergence_figure)
+        row2_layout.addWidget(self.canvas_convergence, stretch=1)
 
-        right_layout.addWidget(row2, stretch=1)
+        right_layout.addWidget(row2, stretch=2)
 
         root_layout.addWidget(right_panel, stretch=1)
 
@@ -1471,6 +1460,70 @@ class Act3Tab(QWidget):
         self.cluster_figure.tight_layout()
         self.canvas_cluster.draw()
 
+    def update_convergence_chart(self):
+        """
+        Rebuild Chart 3C (convergence score) using current control panel settings.
+        """
+        cp = self.control_panel
+        year_min = cp.year_min_spin.value()
+        year_max = cp.year_max_spin.value()
+
+        # Clear and rebuild directly on our figure
+        self.convergence_figure.clear()
+
+        # Call the convergence chart function
+        fig_src = make_convergence_score_chart(
+            self.sports_df,
+            self.epa_df,
+            year_min=year_min,
+            year_max=year_max,
+            show_breakdown=True
+        )
+
+        # Get source axis
+        ax_src = fig_src.gca()
+        ax = self.convergence_figure.add_subplot(111)
+
+        # Copy all lines from source
+        for line in ax_src.get_lines():
+            ax.plot(
+                line.get_xdata(),
+                line.get_ydata(),
+                label=line.get_label(),
+                color=line.get_color(),
+                linewidth=line.get_linewidth(),
+                linestyle=line.get_linestyle(),
+                marker=line.get_marker(),
+                markersize=line.get_markersize(),
+            )
+
+        # Copy axis properties
+        ax.set_xlim(ax_src.get_xlim())
+        ax.set_ylim(ax_src.get_ylim())
+        ax.set_xlabel(ax_src.get_xlabel(), fontsize=ax_src.xaxis.label.get_fontsize())
+        ax.set_ylabel(ax_src.get_ylabel(), fontsize=ax_src.yaxis.label.get_fontsize())
+        ax.set_title(ax_src.get_title(), fontsize=ax_src.title.get_fontsize())
+        ax.grid(True, alpha=0.3)
+
+        # Copy legend
+        if ax_src.get_legend():
+            handles, labels = ax_src.get_legend_handles_labels()
+            ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.9)
+
+        # Copy the colored background zones (axhspan patches)
+        for patch in ax_src.patches:
+            ax.add_patch(type(patch)(
+                xy=patch.get_xy(),
+                width=patch.get_width(),
+                height=patch.get_height(),
+                facecolor=patch.get_facecolor(),
+                edgecolor=patch.get_edgecolor(),
+                alpha=patch.get_alpha() or 1.0
+            ))
+
+        self.convergence_figure.tight_layout()
+        self.canvas_convergence.draw()
+
     def _connect_signals(self):
         """
         Connect control panel signals to chart updates.
@@ -1491,6 +1544,10 @@ class Act3Tab(QWidget):
         cp.chk_show_sports.stateChanged.connect(self.update_cluster_chart)
         cp.chk_electric.stateChanged.connect(self.update_cluster_chart)
         cp.cmb_k.currentTextChanged.connect(self.update_cluster_chart)
+
+        # Connect to convergence chart (3C)
+        cp.year_min_spin.valueChanged.connect(self.update_convergence_chart)
+        cp.year_max_spin.valueChanged.connect(self.update_convergence_chart)
 
 
 # ---------- Main Window ----------

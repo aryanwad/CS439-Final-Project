@@ -473,3 +473,169 @@ def make_cluster_plot(
 
     fig.tight_layout()
     return fig
+
+
+def make_convergence_score_chart(
+    sports_df: pd.DataFrame,
+    epa_df: pd.DataFrame,
+    year_min: int = 2011,
+    year_max: int = 2024,
+    show_breakdown: bool = True,
+):
+    """
+    Build Chart 3C: Convergence Score Over Time
+
+    Quantifies how similar sports and EPA markets become over time by tracking
+    the distance between their average characteristics.
+
+    Parameters
+    ----------
+    sports_df : pd.DataFrame
+        Sports car dataset with HP, MPG, Price
+    epa_df : pd.DataFrame
+        EPA dataset with HP, MPG data
+    year_min, year_max : int
+        Year range to analyze
+    show_breakdown : bool
+        If True, show individual metric lines (HP, MPG, Price)
+        If False, show only overall convergence score
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure ready to embed in dashboard
+    """
+    # Filter datasets by year range
+    sports_filtered = sports_df[(sports_df["Year"] >= year_min) & (sports_df["Year"] <= year_max)].copy()
+    epa_filtered = epa_df[(epa_df["Year"] >= year_min) & (epa_df["Year"] <= year_max)].copy()
+
+    # Define fuel types for EPA gas vehicles (exclude EVs for fair comparison)
+    gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
+                 'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
+    epa_gas = epa_filtered[epa_filtered["Fuel Type"].isin(gas_types)]
+
+    # Calculate yearly metrics for each market
+    years = []
+    hp_distances = []
+    mpg_distances = []
+
+    for year in range(year_min, year_max + 1):
+        sports_year = sports_filtered[sports_filtered['Year'] == year]
+        epa_year = epa_gas[epa_gas['Year'] == year]
+
+        # Skip year if insufficient data
+        if len(sports_year) < 5 or len(epa_year) < 10:
+            continue
+
+        years.append(year)
+
+        # Calculate average HP
+        sports_hp = sports_year['Horsepower'].mean()
+        epa_hp = epa_year['Horsepower (est)'].mean()
+        hp_diff = abs(sports_hp - epa_hp)
+        hp_distances.append(hp_diff)
+
+        # Calculate average MPG
+        sports_mpg = sports_year['MPG'].mean()
+        epa_mpg = epa_year['Combined Mpg For Fuel Type1'].mean()
+        mpg_diff = abs(sports_mpg - epa_mpg)
+        mpg_distances.append(mpg_diff)
+
+    if len(years) == 0:
+        # No data available
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.text(
+            0.5, 0.5,
+            "Insufficient data for convergence analysis",
+            ha='center', va='center',
+            fontsize=12, color='gray',
+            transform=ax.transAxes
+        )
+        ax.set_xlabel("Year")
+        ax.set_ylabel("Convergence Score")
+        ax.set_title("Chart 3C: Market Convergence Score Over Time")
+        fig.tight_layout()
+        return fig
+
+    # Normalize to baseline (first year = 100 for divergence metrics)
+    hp_baseline = hp_distances[0]
+    mpg_baseline = mpg_distances[0]
+
+    # Calculate normalized divergence scores (higher = more different)
+    hp_scores = [100 * (d / hp_baseline) for d in hp_distances]
+    mpg_scores = [100 * (d / mpg_baseline) for d in mpg_distances]
+
+    # Overall convergence score (average of metrics)
+    overall_scores = [(hp + mpg) / 2 for hp, mpg in zip(hp_scores, mpg_scores)]
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot overall convergence score (bold line)
+    ax.plot(
+        years,
+        overall_scores,
+        label="Overall Divergence",
+        linewidth=3,
+        color="#8B4513",  # Brown - neutral
+        marker='D',
+        markersize=7,
+        zorder=10
+    )
+
+    # Plot breakdown lines if requested
+    if show_breakdown:
+        ax.plot(
+            years,
+            hp_scores,
+            label="Performance Gap (HP)",
+            linewidth=2,
+            color="#d62728",  # Red
+            marker='o',
+            markersize=5,
+            alpha=0.7,
+            linestyle='--'
+        )
+
+        ax.plot(
+            years,
+            mpg_scores,
+            label="Efficiency Gap (MPG)",
+            linewidth=2,
+            color="#2ca02c",  # Green
+            marker='s',
+            markersize=5,
+            alpha=0.7,
+            linestyle='--'
+        )
+
+    # Reference line at 100 (baseline year)
+    ax.axhline(y=100, color='gray', linestyle=':', linewidth=1.5, alpha=0.7, label='Baseline (2011)')
+
+    # Styling
+    ax.set_xlabel("Year", fontsize=11)
+    ax.set_ylabel("Divergence Score\n(100 = Baseline, Lower = More Similar)", fontsize=11)
+    ax.set_title("Chart 3C: Market Divergence Over Time\n(Sports vs. EPA Gas Vehicles)",
+                 fontsize=12, fontweight='bold')
+    ax.legend(fontsize=9, loc='best', framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+
+    # Add interpretation zones (background shading)
+    ax.axhspan(0, 70, alpha=0.1, color='green', label='_nolegend_')
+    ax.axhspan(70, 100, alpha=0.1, color='yellow', label='_nolegend_')
+    ax.axhspan(100, max(overall_scores) * 1.1, alpha=0.1, color='red', label='_nolegend_')
+
+    # Add zone labels
+    ax.text(year_min + 0.5, 35, 'Converging', fontsize=9, color='darkgreen',
+            style='italic', alpha=0.7)
+    ax.text(year_min + 0.5, 85, 'Moderate Gap', fontsize=9, color='orange',
+            style='italic', alpha=0.7)
+    if max(overall_scores) > 100:
+        ax.text(year_min + 0.5, max(overall_scores) * 0.95, 'Divergent', fontsize=9,
+                color='darkred', style='italic', alpha=0.7)
+
+    # Set y-axis limits
+    ax.set_ylim(bottom=0, top=max(overall_scores) * 1.15)
+
+    fig.tight_layout()
+    return fig
