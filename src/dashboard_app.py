@@ -1295,8 +1295,27 @@ class Act3Tab(QWidget):
         super().__init__(parent)
         self.sports_df = sports_df
         self.epa_df = epa_df
+        self.cluster_artists = []
+        self.cluster_data = None
+        self.cluster_annot = None
+        self._first_show = True
         self._build_ui()
         self._connect_signals()
+        self.update_indices_chart()
+        self.update_cluster_chart()
+        self.update_convergence_chart()
+
+    def showEvent(self, event):
+        """Override showEvent to force proper layout on first display"""
+        super().showEvent(event)
+        if self._first_show:
+            self._first_show = False
+            # Force a redraw after the widget is properly sized
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, self._refresh_all_charts)
+
+    def _refresh_all_charts(self):
+        """Refresh all charts to ensure proper sizing"""
         self.update_indices_chart()
         self.update_cluster_chart()
         self.update_convergence_chart()
@@ -1407,11 +1426,11 @@ class Act3Tab(QWidget):
         self.cluster_figure.clear()
         ax = self.cluster_figure.add_subplot(111)
 
-        # Call the cluster plot function but extract the data ourselves
+        # Call the cluster plot function and get scatter artists + data for tooltips
         from plots_act3 import make_cluster_plot
 
-        # Get the source figure
-        fig_src = make_cluster_plot(
+        # Get the source figure, scatter artists, and data
+        fig_src, scatter_artists, cluster_data = make_cluster_plot(
             self.sports_df,
             self.epa_df,
             year_min=year_min,
@@ -1421,19 +1440,23 @@ class Act3Tab(QWidget):
             show_epa=show_epa,
         )
 
+        # Store for tooltip functionality
+        self.cluster_artists = []
+        self.cluster_data = cluster_data
+
         # Get source axis
         ax_src = fig_src.gca()
 
-        # Manually recreate scatter plots from source data
-        for collection in ax_src.collections:
-            offsets = collection.get_offsets()
-            colors = collection.get_facecolors()
-            sizes = collection.get_sizes()
-            marker = collection.get_paths()[0] if len(collection.get_paths()) > 0 else 'o'
-            edgecolors = collection.get_edgecolors()
-            linewidths = collection.get_linewidths()
+        # Recreate scatter plots and store artists
+        for orig_scatter, data_subset in scatter_artists:
+            offsets = orig_scatter.get_offsets()
+            colors = orig_scatter.get_facecolors()
+            sizes = orig_scatter.get_sizes()
+            marker = orig_scatter.get_paths()[0] if len(orig_scatter.get_paths()) > 0 else 'o'
+            edgecolors = orig_scatter.get_edgecolors()
+            linewidths = orig_scatter.get_linewidths()
 
-            ax.scatter(
+            scatter = ax.scatter(
                 offsets[:, 0],
                 offsets[:, 1],
                 c=colors,
@@ -1441,8 +1464,9 @@ class Act3Tab(QWidget):
                 marker=marker,
                 edgecolors=edgecolors,
                 linewidths=linewidths,
-                alpha=collection.get_alpha() or 1.0
+                alpha=orig_scatter.get_alpha() or 1.0
             )
+            self.cluster_artists.append((scatter, data_subset))
 
         # Copy axis properties
         ax.set_xlim(ax_src.get_xlim())
@@ -1452,13 +1476,34 @@ class Act3Tab(QWidget):
         ax.set_title(ax_src.get_title())
         ax.grid(True, alpha=0.3)
 
-        # Copy legend
-        if ax_src.get_legend():
-            handles, labels = ax_src.get_legend_handles_labels()
-            ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.9)
+        # Create custom legend (same as in plots_act3.py)
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='Sports Cars', markeredgecolor='black'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=8, label='EPA Vehicles', markeredgecolor='black'),
+            Line2D([0], [0], marker='X', color='w', markerfacecolor='black', markersize=12, label='Cluster Centers', markeredgecolor='white', markeredgewidth=2),
+        ]
+        ax.legend(handles=legend_elements, fontsize=9, loc='best', framealpha=0.9)
+
+        # Always recreate tooltip annotation (since figure.clear() removes it)
+        self.cluster_annot = ax.annotate(
+            "",
+            xy=(0, 0),
+            xytext=(15, 15),
+            textcoords="offset points",
+            bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.9),
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0", color="black"),
+            fontsize=9,
+            visible=False
+        )
 
         self.cluster_figure.tight_layout()
         self.canvas_cluster.draw()
+
+        # Connect hover event (only once)
+        if not hasattr(self, '_cluster_hover_connected'):
+            self.canvas_cluster.mpl_connect('motion_notify_event', self.on_cluster_hover)
+            self._cluster_hover_connected = True
 
     def update_convergence_chart(self):
         """
@@ -1536,6 +1581,65 @@ class Act3Tab(QWidget):
 
         self.convergence_figure.tight_layout()
         self.canvas_convergence.draw()
+
+    def on_cluster_hover(self, event):
+        """
+        Handle mouse hover events on cluster plot.
+        Shows tooltip with vehicle details.
+        """
+        # Return early if annotation not ready or mouse not in axes
+        if not self.cluster_annot or event.inaxes != self.cluster_figure.gca():
+            if self.cluster_annot and self.cluster_annot.get_visible():
+                self.cluster_annot.set_visible(False)
+                self.canvas_cluster.draw_idle()
+            return
+
+        # Check if hovering over any data point
+        point_found = False
+        for scatter, data_subset in self.cluster_artists:
+            contains, ind = scatter.contains(event)
+            if contains:
+                # Get the data for the hovered point
+                idx = ind["ind"][0]
+                data_idx = data_subset.index[idx]
+                row = self.cluster_data.loc[data_idx]
+
+                # Extract data
+                make = row.get("Make", "N/A")
+                model = row.get("Model", "N/A")
+                year = int(row.get("Year", 0))
+                market = row.get("Market", "N/A")
+                hp = row.get("HP", 0)
+                mpg = row.get("MPG", 0)
+                displacement = row.get("Displacement", 0)
+                cluster_id = int(row.get("Cluster", 0)) + 1  # +1 for human-readable cluster number
+                pc1 = row.get("PC1", 0)
+                pc2 = row.get("PC2", 0)
+
+                # Build tooltip text
+                text = (
+                    f"{make} {model}\n"
+                    f"Year: {year} | {market}\n"
+                    f"HP: {hp:.0f} | MPG: {mpg:.1f}\n"
+                    f"Engine: {displacement:.1f}L\n"
+                    f"Cluster: {cluster_id}"
+                )
+
+                # Update annotation properties
+                self.cluster_annot.set_text(text)
+                self.cluster_annot.xy = (pc1, pc2)
+                self.cluster_annot.set_visible(True)
+
+                point_found = True
+                break
+
+        # Hide tooltip if not hovering over any point
+        if not point_found:
+            if self.cluster_annot.get_visible():
+                self.cluster_annot.set_visible(False)
+
+        # Redraw canvas
+        self.canvas_cluster.draw_idle()
 
     def _connect_signals(self):
         """

@@ -181,7 +181,7 @@ def make_indices_chart(
     ev_eff = ev_eff[["Year", "Efficiency_Index"]]
 
     # Create figure with two subplots side by side
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4))
 
     # === LEFT CHART: PERFORMANCE INDEX ===
     if not (show_gas or show_sports or show_ev):
@@ -327,16 +327,16 @@ def make_cluster_plot(
     epa_filtered = epa_df[(epa_df["Year"] >= year_min) & (epa_df["Year"] <= year_max)].copy()
 
     # Prepare sports data
-    sports_data = sports_filtered[["Horsepower", "MPG", "Engine Size (L)"]].copy()
-    sports_data.columns = ["HP", "MPG", "Displacement"]
+    sports_data = sports_filtered[["Car Make", "Car Model", "Year", "Horsepower", "MPG", "Engine Size (L)"]].copy()
+    sports_data.columns = ["Make", "Model", "Year", "HP", "MPG", "Displacement"]
     sports_data["Market"] = "Sports"
-    sports_data.dropna(inplace=True)
+    sports_data.dropna(subset=["HP", "MPG", "Displacement"], inplace=True)
 
     # Prepare EPA data
-    epa_data = epa_filtered[["Horsepower (est)", "Combined Mpg For Fuel Type1", "Engine displacement"]].copy()
-    epa_data.columns = ["HP", "MPG", "Displacement"]
+    epa_data = epa_filtered[["Make", "Model", "Year", "Horsepower (est)", "Combined Mpg For Fuel Type1", "Engine displacement"]].copy()
+    epa_data.columns = ["Make", "Model", "Year", "HP", "MPG", "Displacement"]
     epa_data["Market"] = "EPA"
-    epa_data.dropna(inplace=True)
+    epa_data.dropna(subset=["HP", "MPG", "Displacement"], inplace=True)
 
     # Combine datasets based on selections
     datasets = []
@@ -359,7 +359,7 @@ def make_cluster_plot(
         ax.set_ylabel("PC2")
         ax.set_title("Chart 3B: Market Clustering (PCA + K-Means)")
         fig.tight_layout()
-        return fig
+        return fig, [], pd.DataFrame()
 
     combined = pd.concat(datasets, ignore_index=True)
 
@@ -377,7 +377,7 @@ def make_cluster_plot(
         ax.set_ylabel("PC2")
         ax.set_title("Chart 3B: Market Clustering (PCA + K-Means)")
         fig.tight_layout()
-        return fig
+        return fig, [], pd.DataFrame()
 
     # Extract features for clustering
     features = combined[["HP", "MPG", "Displacement"]].values
@@ -405,14 +405,17 @@ def make_cluster_plot(
     # Define colors for clusters
     cluster_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
 
+    # Store scatter artists for tooltip functionality
+    scatter_artists = []
+
     # Plot each cluster-market combination
     for cluster_id in range(n_clusters):
         cluster_data = combined[combined["Cluster"] == cluster_id]
 
-        # Plot sports cars in this cluster
+        # Plot sports cars in this cluster (no label - we use custom legend)
         sports_cluster = cluster_data[cluster_data["Market"] == "Sports"]
         if len(sports_cluster) > 0:
-            ax.scatter(
+            scatter = ax.scatter(
                 sports_cluster["PC1"],
                 sports_cluster["PC2"],
                 c=cluster_colors[cluster_id],
@@ -420,14 +423,14 @@ def make_cluster_plot(
                 s=80,
                 alpha=0.7,
                 edgecolors='black',
-                linewidth=0.5,
-                label=f"Cluster {cluster_id + 1} - Sports" if show_sports and show_epa else None
+                linewidth=0.5
             )
+            scatter_artists.append((scatter, sports_cluster))
 
-        # Plot EPA vehicles in this cluster
+        # Plot EPA vehicles in this cluster (no label - we use custom legend)
         epa_cluster = cluster_data[cluster_data["Market"] == "EPA"]
         if len(epa_cluster) > 0:
-            ax.scatter(
+            scatter = ax.scatter(
                 epa_cluster["PC1"],
                 epa_cluster["PC2"],
                 c=cluster_colors[cluster_id],
@@ -435,9 +438,9 @@ def make_cluster_plot(
                 s=50,
                 alpha=0.6,
                 edgecolors='black',
-                linewidth=0.5,
-                label=f"Cluster {cluster_id + 1} - EPA" if show_sports and show_epa else None
+                linewidth=0.5
             )
+            scatter_artists.append((scatter, epa_cluster))
 
     # Add cluster centers
     centers_pca = pca.transform(scaler.transform(kmeans.cluster_centers_))
@@ -458,21 +461,19 @@ def make_cluster_plot(
     ax.set_title(f"Chart 3B: Market Clustering (K={n_clusters})", fontsize=12, fontweight='bold')
     ax.grid(True, alpha=0.3)
 
-    # Custom legend
-    if show_sports and show_epa:
-        # Create custom legend to show market types
-        from matplotlib.lines import Line2D
-        legend_elements = [
-            Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='Sports Cars', markeredgecolor='black'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=8, label='EPA Vehicles', markeredgecolor='black'),
-            Line2D([0], [0], marker='X', color='w', markerfacecolor='black', markersize=12, label='Cluster Centers', markeredgecolor='white', markeredgewidth=2),
-        ]
-        ax.legend(handles=legend_elements, fontsize=9, loc='best', framealpha=0.9)
-    else:
-        ax.legend(fontsize=9, loc='best', framealpha=0.9)
+    # Simplified legend - just show shapes meaning
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='Sports Cars', markeredgecolor='black'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=8, label='EPA Vehicles', markeredgecolor='black'),
+        Line2D([0], [0], marker='X', color='w', markerfacecolor='black', markersize=12, label='Cluster Centers', markeredgecolor='white', markeredgewidth=2),
+    ]
+    ax.legend(handles=legend_elements, fontsize=9, loc='best', framealpha=0.9)
 
     fig.tight_layout()
-    return fig
+
+    # Return figure, scatter artists for tooltips, and combined data for tooltip content
+    return fig, scatter_artists, combined
 
 
 def make_convergence_score_chart(
@@ -543,7 +544,7 @@ def make_convergence_score_chart(
 
     if len(years) == 0:
         # No data available
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         ax.text(
             0.5, 0.5,
             "Insufficient data for convergence analysis",
@@ -569,7 +570,7 @@ def make_convergence_score_chart(
     overall_scores = [(hp + mpg) / 2 for hp, mpg in zip(hp_scores, mpg_scores)]
 
     # Create the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
 
     # Plot overall convergence score (bold line)
     ax.plot(
