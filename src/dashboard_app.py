@@ -1511,15 +1511,28 @@ class Act3Tab(QWidget):
             ax.legend(handles, labels, fontsize=9, loc='best', framealpha=0.9)
 
         # Copy the colored background zones (axhspan patches)
+        # axhspan creates Polygon objects, so we need to import Polygon to copy them
+        from matplotlib.patches import Polygon
         for patch in ax_src.patches:
-            ax.add_patch(type(patch)(
-                xy=patch.get_xy(),
-                width=patch.get_width(),
-                height=patch.get_height(),
-                facecolor=patch.get_facecolor(),
-                edgecolor=patch.get_edgecolor(),
-                alpha=patch.get_alpha() or 1.0
-            ))
+            if isinstance(patch, Polygon):
+                # For Polygon objects (created by axhspan), copy the vertices
+                ax.add_patch(Polygon(
+                    xy=patch.get_xy(),
+                    closed=patch.get_closed(),
+                    facecolor=patch.get_facecolor(),
+                    edgecolor=patch.get_edgecolor(),
+                    alpha=patch.get_alpha() or 1.0
+                ))
+            else:
+                # For other patch types (Rectangle, etc.), use the original approach
+                ax.add_patch(type(patch)(
+                    xy=patch.get_xy(),
+                    width=patch.get_width(),
+                    height=patch.get_height(),
+                    facecolor=patch.get_facecolor(),
+                    edgecolor=patch.get_edgecolor(),
+                    alpha=patch.get_alpha() or 1.0
+                ))
 
         self.convergence_figure.tight_layout()
         self.canvas_convergence.draw()
