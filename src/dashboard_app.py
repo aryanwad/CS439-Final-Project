@@ -204,40 +204,41 @@ class ControlPanel(QWidget):
         epa_group.setLayout(epa_layout)
         main_layout.addWidget(epa_group)
 
-        # --- Index & clustering options (Act 3 style) ---
-        index_group = QGroupBox("Indices & Clustering (Act 3)")
-        index_layout = QVBoxLayout()
+        # --- Clustering options (Act 3) ---
+        cluster_group = QGroupBox("Clustering (Act 3)")
+        cluster_layout = QVBoxLayout()
 
-        self.chk_idx_sports_perf = QCheckBox("Sports Performance Index")
-        self.chk_idx_epa_perf = QCheckBox("EPA Performance Index")
-        self.chk_idx_epa_eff = QCheckBox("EPA Efficiency Index")
-        self.chk_idx_sports_eff = QCheckBox("Sports Efficiency Proxy")
-
-        for chk in [
-            self.chk_idx_sports_perf,
-            self.chk_idx_epa_perf,
-            self.chk_idx_epa_eff,
-            self.chk_idx_sports_eff,
-        ]:
-            chk.setChecked(True)
-            index_layout.addWidget(chk)
-
+        # Keep only cluster K dropdown
         cluster_row = QHBoxLayout()
         cluster_row.addWidget(QLabel("Clusters (K):"))
         self.cmb_k = QComboBox()
         self.cmb_k.addItems(["3", "4", "5"])
         cluster_row.addWidget(self.cmb_k)
-        index_layout.addLayout(cluster_row)
+        cluster_layout.addLayout(cluster_row)
 
-        market_row = QHBoxLayout()
-        market_row.addWidget(QLabel("Market filter:"))
+        cluster_group.setLayout(cluster_layout)
+        main_layout.addWidget(cluster_group)
+
+        # Hidden controls (for compatibility - still need to exist)
+        self.chk_idx_sports_perf = QCheckBox()
+        self.chk_idx_sports_perf.setChecked(True)
+        self.chk_idx_sports_perf.setVisible(False)
+
+        self.chk_idx_epa_perf = QCheckBox()
+        self.chk_idx_epa_perf.setChecked(True)
+        self.chk_idx_epa_perf.setVisible(False)
+
+        self.chk_idx_epa_eff = QCheckBox()
+        self.chk_idx_epa_eff.setChecked(True)
+        self.chk_idx_epa_eff.setVisible(False)
+
+        self.chk_idx_sports_eff = QCheckBox()
+        self.chk_idx_sports_eff.setChecked(True)
+        self.chk_idx_sports_eff.setVisible(False)
+
         self.cmb_market_filter = QComboBox()
         self.cmb_market_filter.addItems(["Both", "Sports only", "EPA only"])
-        market_row.addWidget(self.cmb_market_filter)
-        index_layout.addLayout(market_row)
-
-        index_group.setLayout(index_layout)
-        main_layout.addWidget(index_group)
+        self.cmb_market_filter.setVisible(False)
 
         # --- Apply / Reset buttons (hooks for future logic) ---
         button_row = QHBoxLayout()
@@ -394,32 +395,14 @@ class Act1Tab(QWidget):
         self.canvas_epa = FigureCanvas(self.epa_figure)
         row1_layout.addWidget(self.canvas_epa)
 
-        # Row 2: one main comparison visualization + narrative
-        row2 = QWidget()
-        row2_layout = QHBoxLayout(row2)
-        row2_layout.setSpacing(5)  # Reduce spacing
-        row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
-
-        # Bottom-left: comparison chart (1C) - two stacked panels
-        self.comparison_figure = Figure(figsize=(8, 5))
+        # Row 2: comparison chart (full width)
+        # Bottom: comparison chart (1C)
+        self.comparison_figure = Figure(figsize=(12, 5))
         self.canvas_comparison = FigureCanvas(self.comparison_figure)
-        row2_layout.addWidget(self.canvas_comparison)
-
-        # Bottom-right: narrative box
-        self.narrative_box = QTextEdit()
-        self.narrative_box.setReadOnly(True)
-        self.narrative_box.setMinimumWidth(220)
-        self.narrative_box.setPlainText(
-            "Act 1 Narrative:\n\n"
-            "- Sports cars prioritize performance and luxury.\n"
-            "- EPA vehicles prioritize efficiency and emissions.\n"
-            "- This chart (1B) shows how MPG, CO₂, and engine size evolve over time."
-        )
-        row2_layout.addWidget(self.narrative_box)
 
         # Add rows to right layout
         right_layout.addWidget(row1, stretch=2)
-        right_layout.addWidget(row2, stretch=3)
+        right_layout.addWidget(self.canvas_comparison, stretch=3)
 
         root_layout.addWidget(right_panel, stretch=1)
 
@@ -900,56 +883,8 @@ class Act2Tab(QWidget):
         self.canvas_scatter = FigureCanvas(self.scatter_figure)
         row1_layout.addWidget(self.canvas_scatter)
 
-        # Row 2: narrative box
-        row2 = QWidget()
-        row2_layout = QHBoxLayout(row2)
-        row2_layout.setSpacing(5)  # Reduce spacing
-        row2_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
-
-        # Narrative box
-        self.narrative_box = QTextEdit()
-        self.narrative_box.setReadOnly(True)
-        self.narrative_box.setMarkdown(
-            "## Act 2: The Electrification Revolution\n\n"
-            "### The Market Transformation (2013-2024)\n\n"
-            "**What You're Seeing:**\n\n"
-            "The left visualization (2A) shows a dramatic market shift:\n"
-            "- **2013-2015**: Gasoline dominates ~85-90% of the market. Hybrids represent a small "
-            "but growing alternative. EVs are barely visible.\n"
-            "- **2016-2018**: The inflection point. EV share begins climbing while gas share "
-            "steadily declines. Hybrids stabilize as a bridge technology.\n"
-            "- **2019-2024**: Rapid acceleration. EVs capture 15-20% market share by 2024. "
-            "The composition of mainstream vehicles fundamentally changes.\n\n"
-            "### Breaking the Efficiency Ceiling\n\n"
-            "The right visualization (2B) reveals something remarkable:\n"
-            "- **Gas vehicles (blue dots)**: Stuck at 20-35 MPG across all years. Despite decades "
-            "of engineering, efficiency improvements are incremental.\n"
-            "- **Hybrids (orange dots)**: Achieve 40-60 MPG by combining gas and electric power. "
-            "A meaningful improvement, but still limited.\n"
-            "- **EVs (green dots)**: Appear in later years at 80-140+ MPG equivalent. They don't "
-            "just improve efficiency - they redefine what's possible.\n\n"
-            "**Hover over any dot** to see specific vehicle models and their exact specifications.\n\n"
-            "### The Key Insight: One-Sided Convergence\n\n"
-            "This is where the story gets interesting:\n"
-            "- **EPA vehicles move toward performance**: By adopting electric powertrains, mainstream "
-            "vehicles gain both efficiency AND performance capabilities.\n"
-            "- **Sports cars stay traditional**: Our sports car dataset contains no EVs. While EPA "
-            "vehicles electrify, performance vehicles in this analysis remain combustion-based.\n"
-            "- **The gap narrows from one side only**: Convergence is happening, but it's asymmetric. "
-            "Only one market is evolving.\n\n"
-            "### Why This Matters\n\n"
-            "Electrification doesn't just improve existing vehicles - it breaks the fundamental "
-            "tradeoff between performance and efficiency. In the combustion era, you chose: "
-            "power OR economy. EVs deliver both.\n\n"
-            "This sets up our final question in Act 3: If only one market is moving, can we "
-            "truly call this convergence? Or are we witnessing two markets that will remain "
-            "fundamentally distinct?"
-        )
-        row2_layout.addWidget(self.narrative_box)
-
-        # Add rows to right layout
-        right_layout.addWidget(row1, stretch=2)
-        right_layout.addWidget(row2, stretch=1)
+        # Add row to right layout
+        right_layout.addWidget(row1, stretch=1)
 
         root_layout.addWidget(right_panel, stretch=1)
 

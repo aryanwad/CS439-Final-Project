@@ -486,19 +486,22 @@ def make_convergence_score_chart(
     """
     Build Chart 3C: Convergence Score Over Time
 
-    Quantifies how similar sports and EPA markets become over time by tracking
-    the distance between their average characteristics.
+    Quantifies how similar sports and ALL EPA markets (gas + electric + hybrid)
+    become over time by tracking the distance between their average characteristics.
+
+    Including EVs shows how electrification enables convergence - EPA vehicles
+    (including EVs) gain performance capabilities, narrowing the gap with sports cars.
 
     Parameters
     ----------
     sports_df : pd.DataFrame
         Sports car dataset with HP, MPG, Price
     epa_df : pd.DataFrame
-        EPA dataset with HP, MPG data
+        EPA dataset with HP, MPG data (includes all fuel types)
     year_min, year_max : int
         Year range to analyze
     show_breakdown : bool
-        If True, show individual metric lines (HP, MPG, Price)
+        If True, show individual metric lines (HP, MPG)
         If False, show only overall convergence score
 
     Returns
@@ -510,10 +513,8 @@ def make_convergence_score_chart(
     sports_filtered = sports_df[(sports_df["Year"] >= year_min) & (sports_df["Year"] <= year_max)].copy()
     epa_filtered = epa_df[(epa_df["Year"] >= year_min) & (epa_df["Year"] <= year_max)].copy()
 
-    # Define fuel types for EPA gas vehicles (exclude EVs for fair comparison)
-    gas_types = ['Regular', 'Premium', 'Midgrade', 'Gasoline or E85',
-                 'Premium or E85', 'Diesel', 'Gasoline or natural gas', 'CNG']
-    epa_gas = epa_filtered[epa_filtered["Fuel Type"].isin(gas_types)]
+    # Use ALL EPA vehicles (gas + electric + hybrid) to show convergence enabled by EVs
+    epa_all = epa_filtered.copy()
 
     # Calculate yearly metrics for each market
     years = []
@@ -522,7 +523,7 @@ def make_convergence_score_chart(
 
     for year in range(year_min, year_max + 1):
         sports_year = sports_filtered[sports_filtered['Year'] == year]
-        epa_year = epa_gas[epa_gas['Year'] == year]
+        epa_year = epa_all[epa_all['Year'] == year]
 
         # Skip year if insufficient data
         if len(sports_year) < 5 or len(epa_year) < 10:
@@ -616,27 +617,27 @@ def make_convergence_score_chart(
     # Styling
     ax.set_xlabel("Year", fontsize=11)
     ax.set_ylabel("Divergence Score\n(100 = Baseline, Lower = More Similar)", fontsize=11)
-    ax.set_title("Chart 3C: Market Divergence Over Time\n(Sports vs. EPA Gas Vehicles)",
+    ax.set_title("Chart 3C: Market Divergence Over Time\n(Sports vs. All EPA Vehicles)",
                  fontsize=12, fontweight='bold')
     ax.legend(fontsize=9, loc='best', framealpha=0.9)
     ax.grid(True, alpha=0.3)
 
-    # Add interpretation zones (background shading)
-    ax.axhspan(0, 70, alpha=0.1, color='green', label='_nolegend_')
+    # Add interpretation zones (background shading) - adjusted for 60-240 range
+    ax.axhspan(60, 70, alpha=0.1, color='green', label='_nolegend_')
     ax.axhspan(70, 100, alpha=0.1, color='yellow', label='_nolegend_')
-    ax.axhspan(100, max(overall_scores) * 1.1, alpha=0.1, color='red', label='_nolegend_')
+    ax.axhspan(100, 240, alpha=0.1, color='red', label='_nolegend_')
 
     # Add zone labels
-    ax.text(year_min + 0.5, 35, 'Converging', fontsize=9, color='darkgreen',
+    ax.text(year_min + 0.5, 65, 'Converging', fontsize=9, color='darkgreen',
             style='italic', alpha=0.7)
     ax.text(year_min + 0.5, 85, 'Moderate Gap', fontsize=9, color='orange',
             style='italic', alpha=0.7)
     if max(overall_scores) > 100:
-        ax.text(year_min + 0.5, max(overall_scores) * 0.95, 'Divergent', fontsize=9,
+        ax.text(year_min + 0.5, min(max(overall_scores) * 0.95, 225), 'Divergent', fontsize=9,
                 color='darkred', style='italic', alpha=0.7)
 
-    # Set y-axis limits
-    ax.set_ylim(bottom=0, top=max(overall_scores) * 1.15)
+    # Set y-axis limits to focus on the data range (60-240)
+    ax.set_ylim(bottom=60, top=240)
 
     fig.tight_layout()
     return fig
