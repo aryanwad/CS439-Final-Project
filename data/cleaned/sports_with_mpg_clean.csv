@@ -1,6 +1,6 @@
 Car Make,Car Model,Year,Engine Size (L),Horsepower,Torque (lb-ft),0-60 MPH Time (seconds),Price (in USD),MPG
-Bugatti,Chiron Super Sport 300+,2022,8.0,1578.0,1180.0,2.3,5200000.0,6.699999999999999
-Bugatti,Chiron Super Sport 300+,2021,8.0,1578.0,1180.0,2.4,5200000.0,6.699999999999999
+Bugatti,Chiron Super Sport 300+,2022,8.0,1578.0,1180.0,2.3,5200000.0,6.7
+Bugatti,Chiron Super Sport 300+,2021,8.0,1578.0,1180.0,2.4,5200000.0,6.7
 Bugatti,Chiron,2022,8.0,1500.0,1180.0,2.5,3900000.0,7.0
 Lamborghini,Sián,2021,6.5,819.0,531.0,2.8,3600000.0,12.3
 Bugatti,Chiron Pur Sport,2021,8.0,1500.0,1180.0,2.3,3599000.0,7.0

@@ -679,8 +679,8 @@ class Act1Tab(QWidget):
         metrics_data = []
         y_position = 0
 
-        # Sports metrics - all GREEN to show performance/luxury priority
-        sports_color = "#2ca02c"  # Green
+        # Sports metrics - ORANGE to show performance/luxury priority (colorblind-friendly)
+        sports_color = "#ff7f0e"  # Orange (was green)
         sports_metrics = [
             ("Engine Size (L)", "Engine Size", False),
             ("Horsepower", "Horsepower", False),
@@ -714,8 +714,8 @@ class Act1Tab(QWidget):
 
         y_position += 0.5  # Add gap between markets
 
-        # EPA metrics - all RED to show efficiency/environmental priority
-        epa_color = "#d62728"  # Red
+        # EPA metrics - BLUE to show mainstream/efficiency priority (consistent with other charts)
+        epa_color = "#1f77b4"  # Blue (was red)
         epa_metrics = [
             ("Engine displacement", "Engine Size", False),
             ("Combined Mpg For Fuel Type1", "Efficiency (MPG)", False),
@@ -787,8 +787,8 @@ class Act1Tab(QWidget):
         # Add color-coded legend
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor='#2ca02c', label='Sports Cars (Performance)'),
-            Patch(facecolor='#d62728', label='EPA Vehicles (Efficiency)')
+            Patch(facecolor='#ff7f0e', label='Sports Cars (Performance)'),  # Orange
+            Patch(facecolor='#1f77b4', label='EPA Vehicles (Efficiency)')   # Blue
         ]
         ax.legend(handles=legend_elements, loc='upper left', fontsize=9, framealpha=0.9)
 

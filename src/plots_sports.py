@@ -139,7 +139,7 @@ def make_sports_trend_figure(
             plot_df["Horsepower"],
             label="Avg Horsepower",
             linewidth=2,
-            color="#d62728",  # Red
+            color="#1f77b4",  # Blue
         )
 
     if show_engine and "Engine Size (L)" in plot_df.columns:
@@ -148,7 +148,7 @@ def make_sports_trend_figure(
             plot_df["Engine Size (L)"],
             label="Avg Engine Size (L)",
             linewidth=2,
-            color="#ff7f0e",  # Orange
+            color="#8c564b",  # Brown (mechanical/engine)
         )
 
     if show_price and "Price (in USD)" in plot_df.columns:
@@ -159,7 +159,7 @@ def make_sports_trend_figure(
             plot_df["Price (in USD)"],
             label="Avg Price (USD)",
             linewidth=2,
-            color="#2ca02c",  # Green
+            color="#9467bd",  # Purple (economic/secondary)
         )
 
     ax.set_xlabel("Year", fontsize=10)

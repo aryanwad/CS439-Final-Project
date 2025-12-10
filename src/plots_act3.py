@@ -210,7 +210,7 @@ def make_indices_chart(
                 sports_perf["Performance_Index"],
                 label="Sports Cars",
                 linewidth=2.5,
-                color="#d62728",  # Red
+                color="#ff7f0e",  # Orange (colorblind-friendly, was red)
                 marker='s',
                 markersize=5
             )
@@ -260,7 +260,7 @@ def make_indices_chart(
                 sports_eff["Efficiency_Index"],
                 label="Sports Cars",
                 linewidth=2.5,
-                color="#d62728",  # Red
+                color="#ff7f0e",  # Orange (colorblind-friendly, was red)
                 marker='s',
                 markersize=5
             )
@@ -592,7 +592,7 @@ def make_convergence_score_chart(
             hp_scores,
             label="Performance Gap (HP)",
             linewidth=2,
-            color="#d62728",  # Red
+            color="#ff7f0e",  # Orange (sports/performance, colorblind-friendly)
             marker='o',
             markersize=5,
             alpha=0.7,

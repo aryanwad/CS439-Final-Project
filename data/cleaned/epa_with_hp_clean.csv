@@ -1,12 +1,12 @@
 Make,Model,Year,Fuel Type,MPG Data,Combined Mpg For Fuel Type1,Co2  Tailpipe For Fuel Type1,Engine displacement,Horsepower (est),0-60 time (est)
 Mercedes-Benz,E350 Convertible,2011,Premium,N,20,444.35,3.5,218.75,5.824
 Honda,Accord,2012,Regular,Y,27,329.1481481481481,2.4,150.0,13.034
-Jeep,Compass 4WD,2012,Regular,Y,23,386.39130434782606,2.4,150.0,13.654666666666666
-Nissan,Pathfinder 2WD,2013,Regular,Y,22,406.0,3.5,218.75,8.467199999999998
-Mercedes-Benz,E350 4matic Coupe,2014,Premium or E85,N,23,394.0,3.5,218.75,5.5328
-BMW,535d,2015,Diesel,Y,30,334.0,3.0,281.25,5.7493333333333325
-Chrysler,300 AWD,2016,Gasoline or E85,N,21,415.0,3.6,225.0,7.861777777777778
-Tesla,Model S AWD - 75D,2017,Electricity,N,103,0.0,,,
+Jeep,Compass 4WD,2012,Regular,Y,23,386.39130434782606,2.4,150.0,13.648
+Nissan,Pathfinder 2WD,2013,Regular,Y,22,406.0,3.5,218.75,8.467
+Mercedes-Benz,E350 4matic Coupe,2014,Premium or E85,N,23,394.0,3.5,218.75,5.533
+BMW,535d,2015,Diesel,Y,30,334.0,3.0,281.25,5.749
+Chrysler,300 AWD,2016,Gasoline or E85,N,21,415.0,3.6,225.0,7.862
+Tesla,Model S AWD - 75D,2017,Electricity,N,103,0.0,,670.0,2.5
 Chevrolet,Cruze,2018,Diesel,Y,37,276.0,1.6,150.0,9.947
 Jeep,Renegade 4WD,2019,Regular,Y,24,371.0,2.4,150.0,11.792666666666666
 BMW,840i xDrive Coupe,2020,Premium,N,23,380.0,3.0,281.25,4.303288888888888

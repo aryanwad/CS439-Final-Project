@@ -127,13 +127,14 @@ def make_epa_trend_figure(
         fig.tight_layout()
         return fig
 
-    # Plot lines based on flags
+    # Plot lines based on flags - using same colors as Chart 1A for visual consistency
     if show_mpg and "Combined Mpg For Fuel Type1" in plot_df.columns:
         ax.plot(
             plot_df["Year"],
             plot_df["Combined Mpg For Fuel Type1"],
             label="Avg Combined MPG",
             linewidth=2,
+            color="#ff7f0e",  # Orange (primary metric, matches HP in Chart 1A)
         )
 
     if show_co2 and "Co2  Tailpipe For Fuel Type1" in plot_df.columns:
@@ -142,6 +143,7 @@ def make_epa_trend_figure(
             plot_df["Co2  Tailpipe For Fuel Type1"],
             label="Avg Tailpipe CO₂ (g/mi)",
             linewidth=2,
+            color="#9467bd",  # Purple (secondary metric, matches Price in Chart 1A)
         )
 
     if show_displacement and "Engine displacement" in plot_df.columns:
@@ -150,6 +152,7 @@ def make_epa_trend_figure(
             plot_df["Engine displacement"],
             label="Avg Engine Displacement (L)",
             linewidth=2,
+            color="#8c564b",  # Brown (engine metric, matches Engine Size in Chart 1A)
         )
 
     ax.set_xlabel("Year", fontsize=10)
